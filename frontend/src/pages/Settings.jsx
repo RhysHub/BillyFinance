@@ -398,9 +398,23 @@ export default function Settings() {
           <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
             <h3 className="font-semibold mb-1">Backup</h3>
             <p className="text-sm text-slate-400 mb-4">Download your entire database as a single <code className="text-indigo-400">.db</code> file.</p>
-            <a href="/api/backup" download className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <button
+              onClick={async () => {
+                const key = localStorage.getItem(KEY_STORAGE);
+                const res = await fetch('/api/backup', key ? { headers: { 'X-API-Key': key } } : {});
+                if (!res.ok) { alert('Backup failed — ' + (await res.json()).error); return; }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `billy-backup-${new Date().toISOString().slice(0,10)}.db`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
               <Download size={16} /> Download Backup
-            </a>
+            </button>
           </div>
 
           <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
