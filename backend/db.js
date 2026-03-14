@@ -46,7 +46,8 @@ if (expensesSQL?.sql?.includes('CHECK')) {
       is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT DEFAULT (datetime('now'))
     );
-    INSERT INTO expenses SELECT * FROM expenses_old;
+    INSERT INTO expenses (id, name, description, category_id, schedule, is_variable, fixed_amount, is_active, created_at)
+    SELECT id, name, description, category_id, schedule, is_variable, fixed_amount, is_active, created_at FROM expenses_old;
     DROP TABLE expenses_old;
   `);
   db.pragma('legacy_alter_table = OFF');
