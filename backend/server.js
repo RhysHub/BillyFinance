@@ -1,0 +1,79 @@
+import express from 'express';
+import cors from 'cors';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
+
+// Init DB (runs schema creation + seed on first boot)
+import './db.js';
+
+import membersRouter from './routes/members.js';
+import loansRouter from './routes/loans.js';
+import paymentGroupsRouter from './routes/payment_groups.js';
+import categoriesRouter from './routes/categories.js';
+import expensesRouter from './routes/expenses.js';
+import summaryRouter from './routes/summary.js';
+import settingsRouter, { getDbKey } from './routes/settings.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PORT = parseInt(process.env.PORT || '3000', 10);
+const API_KEY = process.env.API_KEY;
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Optional API key auth — checks env var first, then DB-stored key
+// /api/settings is always exempt so the UI can bootstrap
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/settings')) return next();
+  const activeKey = API_KEY || getDbKey();
+  if (!activeKey) return next();
+  const provided = req.headers['x-api-key'];
+  if (provided !== activeKey) return res.status(401).json({ error: 'Unauthorized — include X-API-Key header' });
+  next();
+});
+
+app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '1.0.0' }));
+
+// Backup: download the raw SQLite file
+app.get('/api/backup', (req, res) => {
+  const dbPath = process.env.DB_PATH || './data/billy.db';
+  res.download(dbPath, `billy-backup-${new Date().toISOString().slice(0,10)}.db`);
+});
+
+// Restore: upload a SQLite file to replace the current DB
+app.post('/api/restore', (req, res) => {
+  import('fs').then(({ createWriteStream }) => {
+    const dbPath = process.env.DB_PATH || './data/billy.db';
+    const out = createWriteStream(dbPath);
+    req.pipe(out);
+    out.on('finish', () => res.json({ ok: true, message: 'Restored — restart the server to apply.' }));
+    out.on('error', (e) => res.status(500).json({ error: e.message }));
+  });
+});
+
+app.use('/api/settings', settingsRouter);
+app.use('/api/members', membersRouter);
+app.use('/api/categories', categoriesRouter);
+app.use('/api/expenses', expensesRouter);
+app.use('/api', summaryRouter);
+app.use('/api/loans', loansRouter);
+app.use('/api/payment-groups', paymentGroupsRouter);
+
+// Serve built frontend
+const publicPath = join(__dirname, 'public');
+if (existsSync(publicPath)) {
+  app.use(express.static(publicPath));
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(join(publicPath, 'index.html'));
+    } else {
+      res.status(404).json({ error: 'Not found' });
+    }
+  });
+}
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Billy running at http://0.0.0.0:${PORT}`);
+});

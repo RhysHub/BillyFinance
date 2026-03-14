@@ -1,0 +1,16 @@
+services:
+  billy:
+    build: .
+    container_name: billy
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Bind mount — change the left side to wherever you want to store data on TrueNAS
+      # e.g. /mnt/tank/apps/billy/data:/data
+      - ./data:/data
+    environment:
+      - DB_PATH=/data/billy.db
+      - PORT=3000
+      # Optional: uncomment to require an API key on all /api/* requests
+      # - API_KEY=your-secret-key-here

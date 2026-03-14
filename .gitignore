@@ -1,0 +1,10 @@
+node_modules/
+*.db
+*.db-wal
+*.db-shm
+frontend/dist/
+.env
+.DS_Store
+data/
+.claude/
+.vite/

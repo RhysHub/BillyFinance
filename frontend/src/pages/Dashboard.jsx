@@ -1,0 +1,142 @@
+import { useQuery } from '@tanstack/react-query';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { api } from '../api.js';
+import { TrendingUp, Receipt, Users, DollarSign } from 'lucide-react';
+
+const fmt = (n) => n?.toLocaleString('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: 0, maximumFractionDigits: 0 }) ?? '$0';
+const fmt2 = (n) => n?.toLocaleString('en-AU', { style: 'currency', currency: 'AUD' }) ?? '$0.00';
+
+function StatCard({ icon: Icon, label, value, sub, color = 'text-indigo-400' }) {
+  return (
+    <div className="bg-slate-900 rounded-xl p-5 border border-slate-800">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-slate-400 text-sm">{label}</span>
+        <div className={`p-2 rounded-lg bg-slate-800 ${color}`}>
+          <Icon size={16} />
+        </div>
+      </div>
+      <p className={`text-2xl font-bold ${color}`}>{value}</p>
+      {sub && <p className="text-slate-500 text-xs mt-1">{sub}</p>}
+    </div>
+  );
+}
+
+export default function Dashboard() {
+  const { data, isLoading, error } = useQuery({ queryKey: ['summary'], queryFn: api.summary });
+
+  if (isLoading) return <div className="p-8 text-slate-400">Loading...</div>;
+  if (error) return <div className="p-8 text-red-400">Error: {error.message}</div>;
+
+  const { total, memberBreakdown, categoryBreakdown, expenseCount } = data;
+
+  return (
+    <div className="p-8">
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold">Dashboard</h2>
+        <p className="text-slate-400 text-sm mt-1">Your household's financial overview</p>
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <StatCard icon={DollarSign}  label="Monthly Total"    value={fmt(total.monthly)}    sub={`${fmt(total.weekly)}/wk · ${fmt(total.fortnightly)}/fn`} color="text-emerald-400" />
+        <StatCard icon={TrendingUp}  label="Annual Total"     value={fmt(total.annually)}   color="text-indigo-400" />
+        <StatCard icon={Receipt}     label="Active Expenses"  value={expenseCount}          color="text-amber-400" />
+        <StatCard icon={Users}       label="Members"          value={memberBreakdown.length} color="text-purple-400" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* Per-member breakdown */}
+        <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
+          <h3 className="font-semibold mb-4">Per-Person Breakdown</h3>
+          {memberBreakdown.length === 0 ? (
+            <p className="text-slate-500 text-sm">No members yet — add some on the Members page.</p>
+          ) : (
+            <div className="space-y-3">
+              {memberBreakdown.map(m => (
+                <div key={m.id}>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: m.color }} />
+                      <span className="font-medium text-sm">{m.name}</span>
+                    </div>
+                    <span className="font-bold text-emerald-400">{fmt2(m.monthly)}<span className="text-slate-500 font-normal">/mo</span></span>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-500 pl-5">
+                    <span>{fmt2(m.weekly)}/wk</span>
+                    <span>{fmt2(m.fortnightly)}/fn</span>
+                    <span>{fmt(m.annually)}/yr</span>
+                  </div>
+                  {/* Share bar */}
+                  <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: total.monthly > 0 ? `${(m.monthly / total.monthly) * 100}%` : '0%',
+                        background: m.color,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Category breakdown pie */}
+        <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
+          <h3 className="font-semibold mb-4">By Category</h3>
+          {categoryBreakdown.length === 0 ? (
+            <p className="text-slate-500 text-sm">No expenses yet.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={categoryBreakdown}
+                  dataKey="monthly"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  innerRadius={45}
+                >
+                  {categoryBreakdown.map((cat, i) => (
+                    <Cell key={i} fill={cat.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                  formatter={(val) => [fmt2(val), 'Monthly']}
+                />
+                <Legend
+                  formatter={(val) => <span style={{ color: '#94a3b8', fontSize: '12px' }}>{val}</span>}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Category list */}
+      {categoryBreakdown.length > 0 && (
+        <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
+          <h3 className="font-semibold mb-4">Category Details</h3>
+          <div className="space-y-2">
+            {categoryBreakdown.map((cat, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: cat.color }} />
+                <span className="text-sm flex-1">{cat.name}</span>
+                <span className="text-sm text-slate-400">{fmt2(cat.monthly)}/mo</span>
+                <span className="text-xs text-slate-600 w-12 text-right">
+                  {total.monthly > 0 ? `${((cat.monthly / total.monthly) * 100).toFixed(0)}%` : '0%'}
+                </span>
+                <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${total.monthly > 0 ? (cat.monthly / total.monthly) * 100 : 0}%`, background: cat.color }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
