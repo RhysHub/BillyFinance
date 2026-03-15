@@ -13,14 +13,10 @@ docker compose up -d
 
 Open http://localhost:4823
 
-### On TrueNAS (or any server)
+### On a server
 
-1. Create a folder for Billy data:
-```bash
-mkdir -p /mnt/tank/apps/billy/data
-```
+Create a `docker-compose.yml` anywhere and run it:
 
-2. Create a `docker-compose.yml` in that folder:
 ```yaml
 services:
   billy:
@@ -36,13 +32,11 @@ services:
       - PORT=4823
 ```
 
-3. Start it:
 ```bash
-cd /mnt/tank/apps/billy
 docker compose up -d
 ```
 
-4. Open `http://your-server-ip:4823`
+Open `http://your-server-ip:4823`
 
 The SQLite database lives at `./data/billy.db`. Back it up by copying that file, or use the download/upload in Settings.
 
