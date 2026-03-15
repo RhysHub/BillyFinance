@@ -454,7 +454,7 @@ export default function Expenses() {
   const [modal, setModal] = useState(null);
   const [expanded, setExpanded] = useState(null);
   const [search, setSearch] = useState('');
-  const [groupBy, setGroupBy] = useState(false);
+  const [groupBy, setGroupBy] = useState(true);
   const [showInactive, setShowInactive] = useState(true);
 
   const { data: expenses = [], isLoading } = useQuery({ queryKey: ['expenses'], queryFn: api.expenses.list });
