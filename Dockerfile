@@ -25,5 +25,8 @@ RUN mkdir -p /data
 ENV DB_PATH=/data/billy.db
 ENV PORT=4823
 
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 4823
-CMD ["node", "server.js"]
+ENTRYPOINT ["/entrypoint.sh"]
