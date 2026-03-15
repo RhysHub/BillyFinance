@@ -11,7 +11,7 @@ mkdir -p data
 docker compose up -d
 ```
 
-Open http://localhost:3000
+Open http://localhost:4823
 
 ### On TrueNAS (or any server)
 
@@ -28,12 +28,12 @@ services:
     container_name: billy
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "4823:4823"
     volumes:
       - ./data:/data
     environment:
       - DB_PATH=/data/billy.db
-      - PORT=3000
+      - PORT=4823
 ```
 
 3. Start it:
@@ -42,7 +42,7 @@ cd /mnt/tank/apps/billy
 docker compose up -d
 ```
 
-4. Open `http://your-server-ip:3000`
+4. Open `http://your-server-ip:4823`
 
 The SQLite database lives at `./data/billy.db`. Back it up by copying that file, or use the download/upload in Settings.
 

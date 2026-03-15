@@ -4,11 +4,11 @@ services:
     container_name: billy
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "4823:4823"
     volumes:
       - ./data:/data
     environment:
       - DB_PATH=/data/billy.db
-      - PORT=3000
+      - PORT=4823
       # Optional: set a static API key (or generate one in the Settings UI instead)
       # - API_KEY=your-secret-key-here
