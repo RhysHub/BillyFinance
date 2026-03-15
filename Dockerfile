@@ -20,11 +20,10 @@ COPY backend/ ./
 # Copy built frontend to be served as static files
 COPY --from=frontend-builder /build/dist ./public
 
-RUN mkdir -p /data && chown -R node:node /data /app
+RUN mkdir -p /data
 
 ENV DB_PATH=/data/billy.db
-ENV PORT=3000
+ENV PORT=4823
 
-EXPOSE 3000
-USER node
+EXPOSE 4823
 CMD ["node", "server.js"]
