@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, X, Check, Receipt, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, X, Check, Receipt, ToggleLeft, ToggleRight, Search, LayoutList, Tag } from 'lucide-react';
 import { api } from '../api.js';
 
 const SCHEDULES = ['WEEKLY', 'FORTNIGHTLY', 'MONTHLY', 'QUARTERLY', 'ANNUALLY', 'ONCE', 'IRREGULAR'];
@@ -451,8 +451,11 @@ function ExpenseForm({ expense, onClose }) {
 
 export default function Expenses() {
   const qc = useQueryClient();
-  const [modal, setModal] = useState(null); // null | 'new' | expense object
+  const [modal, setModal] = useState(null);
   const [expanded, setExpanded] = useState(null);
+  const [search, setSearch] = useState('');
+  const [groupBy, setGroupBy] = useState(false);
+  const [showInactive, setShowInactive] = useState(true);
 
   const { data: expenses = [], isLoading } = useQuery({ queryKey: ['expenses'], queryFn: api.expenses.list });
   const { data: paymentGroups = [] } = useQuery({ queryKey: ['paymentGroups'], queryFn: api.paymentGroups.list });
@@ -477,12 +480,27 @@ export default function Expenses() {
     if (confirm(`Delete "${expense.name}"?`)) deleteMutation.mutate(expense.id);
   }
 
+  const filtered = expenses
+    .filter(e => showInactive || e.is_active)
+    .filter(e => !search || e.name.toLowerCase().includes(search.toLowerCase()));
+
+  const grouped = (() => {
+    if (!groupBy) return [{ label: null, color: null, icon: null, items: filtered }];
+    const map = {};
+    filtered.forEach(e => {
+      const key = e.category_name || '__none__';
+      if (!map[key]) map[key] = { label: e.category_name || 'Uncategorised', color: e.category_color, icon: e.category_icon, items: [] };
+      map[key].items.push(e);
+    });
+    return Object.values(map).sort((a, b) => a.label === 'Uncategorised' ? 1 : b.label === 'Uncategorised' ? -1 : a.label.localeCompare(b.label));
+  })();
+
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold">Expenses</h2>
-          <p className="text-slate-400 text-sm mt-1">{expenses.length} expense{expenses.length !== 1 ? 's' : ''} tracked</p>
+          <p className="text-slate-400 text-sm mt-1">{filtered.length} of {expenses.length} expense{expenses.length !== 1 ? 's' : ''}</p>
         </div>
         <button
           onClick={() => setModal('new')}
@@ -492,10 +510,45 @@ export default function Expenses() {
         </button>
       </div>
 
+      {/* Search + filters */}
+      <div className="flex gap-2 mb-6 flex-wrap">
+        <div className="relative flex-1 min-w-48">
+          <Search size={15} className="absolute left-3 top-2.5 text-slate-500" />
+          <input
+            value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search expenses..."
+            className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+          />
+        </div>
+        <button
+          onClick={() => setGroupBy(v => !v)}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border transition-colors ${groupBy ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'}`}
+        >
+          <Tag size={14} /> Categories
+        </button>
+        <button
+          onClick={() => setShowInactive(v => !v)}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border transition-colors ${!showInactive ? 'bg-slate-700 border-slate-600 text-slate-200' : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'}`}
+        >
+          <LayoutList size={14} /> {showInactive ? 'All' : 'Active only'}
+        </button>
+      </div>
+
       {isLoading && <div className="text-slate-400">Loading...</div>}
 
-      <div className="space-y-2">
-        {expenses.map(exp => {
+      <div className="space-y-6">
+        {grouped.map(group => (
+          <div key={group.label ?? 'all'}>
+            {groupBy && (
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-base">{group.icon ?? ''}</span>
+                <span className="text-sm font-semibold" style={{ color: group.color ?? '#6b7280' }}>{group.label}</span>
+                <span className="text-xs text-slate-600">({group.items.length})</span>
+                <div className="flex-1 h-px bg-slate-800 ml-1" />
+              </div>
+            )}
+            <div className="space-y-2">
+        {group.items.map(exp => {
           const isIrreg = exp.schedule === 'IRREGULAR';
           const monthly = isIrreg
             ? monthlyFromTransactions(exp.entries)
@@ -649,11 +702,14 @@ export default function Expenses() {
             </div>
           );
         })}
+            </div>
+          </div>
+        ))}
 
-        {!isLoading && expenses.length === 0 && (
+        {!isLoading && filtered.length === 0 && (
           <div className="text-center py-16 text-slate-500">
             <Receipt size={40} className="mx-auto mb-3 opacity-30" />
-            <p>No expenses yet. Add your first one!</p>
+            <p>{expenses.length === 0 ? 'No expenses yet. Add your first one!' : 'No expenses match your filters.'}</p>
           </div>
         )}
       </div>
