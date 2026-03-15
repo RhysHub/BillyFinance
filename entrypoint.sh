@@ -1,4 +1,5 @@
 #!/bin/sh
 mkdir -p /data
-chmod 777 /data
+chown -R root:root /data
+chmod -R 777 /data
 exec node server.js
