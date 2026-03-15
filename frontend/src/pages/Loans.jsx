@@ -83,7 +83,7 @@ function LoanForm({ loan, onClose }) {
   const f = (k) => ({ value: form[k], onChange: (e) => setForm(x => ({ ...x, [k]: e.target.value })) });
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._closeOnUp = true; }} onMouseUp={(e) => { if (e.currentTarget._closeOnUp) { e.currentTarget._closeOnUp = false; onClose(); } }}>
       <div className="bg-slate-900 rounded-2xl border border-slate-700 w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-slate-800">
           <h2 className="font-semibold">{isNew ? 'Add Loan' : 'Edit Loan'}</h2>
