@@ -42,13 +42,16 @@ app.get('/api/backup', (req, res) => {
   res.download(dbPath, `billy-backup-${new Date().toISOString().slice(0,10)}.db`);
 });
 
-// Restore: upload a SQLite file to replace the current DB
+// Restore: upload a SQLite file to replace the current DB, then restart
 app.post('/api/restore', (req, res) => {
   import('fs').then(({ createWriteStream }) => {
     const dbPath = process.env.DB_PATH || './data/billy.db';
     const out = createWriteStream(dbPath);
     req.pipe(out);
-    out.on('finish', () => res.json({ ok: true, message: 'Restored — restart the server to apply.' }));
+    out.on('finish', () => {
+      res.json({ ok: true, message: 'Restored successfully — reloading...' });
+      setTimeout(() => process.exit(0), 500);
+    });
     out.on('error', (e) => res.status(500).json({ error: e.message }));
   });
 });

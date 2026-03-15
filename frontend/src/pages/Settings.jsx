@@ -363,9 +363,13 @@ export default function Settings() {
     setRestoring(true);
     setRestoreStatus(null);
     try {
+      const key = localStorage.getItem('billy_api_key');
       const res = await fetch('/api/restore', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          ...(key ? { 'X-API-Key': key } : {}),
+        },
         body: file,
       });
       const data = await res.json();
