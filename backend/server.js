@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
 
 // Init DB (runs schema creation + seed on first boot)
-import './db.js';
+import { db } from './db.js';
 
 import membersRouter from './routes/members.js';
 import loansRouter from './routes/loans.js';
@@ -36,9 +36,10 @@ app.use('/api', (req, res, next) => {
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '1.0.0' }));
 
-// Backup: download the raw SQLite file
+// Backup: checkpoint WAL into main file then download
 app.get('/api/backup', (req, res) => {
   const dbPath = process.env.DB_PATH || './data/billy.db';
+  db.pragma('wal_checkpoint(TRUNCATE)');
   res.download(dbPath, `billy-backup-${new Date().toISOString().slice(0,10)}.db`);
 });
 
