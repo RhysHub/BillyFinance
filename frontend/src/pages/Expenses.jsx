@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, X, Check, Receipt } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, X, Check, Receipt, ToggleLeft, ToggleRight } from 'lucide-react';
 import { api } from '../api.js';
 
 const SCHEDULES = ['WEEKLY', 'FORTNIGHTLY', 'MONTHLY', 'QUARTERLY', 'ANNUALLY', 'ONCE', 'IRREGULAR'];
@@ -465,6 +465,14 @@ export default function Expenses() {
     },
   });
 
+  const toggleActiveMutation = useMutation({
+    mutationFn: (exp) => api.expenses.update(exp.id, { ...exp, is_active: !exp.is_active }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expenses'] });
+      qc.invalidateQueries({ queryKey: ['summary'] });
+    },
+  });
+
   function handleDelete(expense) {
     if (confirm(`Delete "${expense.name}"?`)) deleteMutation.mutate(expense.id);
   }
@@ -567,6 +575,13 @@ export default function Expenses() {
                 </div>
 
                 <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => toggleActiveMutation.mutate(exp)}
+                    title={exp.is_active ? 'Mark inactive' : 'Mark active'}
+                    className={`p-1.5 rounded ${exp.is_active ? 'text-slate-500 hover:text-amber-400' : 'text-amber-400 hover:text-emerald-400'}`}
+                  >
+                    {exp.is_active ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                  </button>
                   <button onClick={() => setExpanded(isExp ? null : exp.id)} className="p-1.5 text-slate-500 hover:text-slate-300 rounded">
                     {isExp ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </button>
