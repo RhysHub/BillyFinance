@@ -484,15 +484,25 @@ export default function Expenses() {
     .filter(e => showInactive || e.is_active)
     .filter(e => !search || e.name.toLowerCase().includes(search.toLowerCase()));
 
+  function expMonthly(exp) {
+    if (!exp.is_active) return 0;
+    if (exp.schedule === 'IRREGULAR') return monthlyFromTransactions(exp.entries) ?? 0;
+    if (exp.is_variable && exp.entries?.length)
+      return toMonthly(exp.entries.reduce((s, e) => s + e.amount, 0) / exp.entries.length, exp.schedule) ?? 0;
+    return exp.fixed_amount !== null ? (toMonthly(exp.fixed_amount, exp.schedule) ?? 0) : 0;
+  }
+
   const grouped = (() => {
-    if (!groupBy) return [{ label: null, color: null, icon: null, items: filtered }];
+    if (!groupBy) return [{ label: null, color: null, icon: null, items: filtered, monthly: null }];
     const map = {};
     filtered.forEach(e => {
       const key = e.category_name || '__none__';
       if (!map[key]) map[key] = { label: e.category_name || 'Uncategorised', color: e.category_color, icon: e.category_icon, items: [] };
       map[key].items.push(e);
     });
-    return Object.values(map).sort((a, b) => a.label === 'Uncategorised' ? 1 : b.label === 'Uncategorised' ? -1 : a.label.localeCompare(b.label));
+    return Object.values(map)
+      .sort((a, b) => a.label === 'Uncategorised' ? 1 : b.label === 'Uncategorised' ? -1 : a.label.localeCompare(b.label))
+      .map(g => ({ ...g, monthly: g.items.reduce((s, e) => s + expMonthly(e), 0) }));
   })();
 
   return (
@@ -544,7 +554,8 @@ export default function Expenses() {
                 <span className="text-base">{group.icon ?? ''}</span>
                 <span className="text-sm font-semibold" style={{ color: group.color ?? '#6b7280' }}>{group.label}</span>
                 <span className="text-xs text-slate-600">({group.items.length})</span>
-                <div className="flex-1 h-px bg-slate-800 ml-1" />
+                <div className="flex-1 h-px bg-slate-800 mx-1" />
+                <span className="text-sm font-semibold text-slate-300">{fmt(group.monthly)}<span className="text-slate-500 font-normal text-xs ml-1">/mo</span></span>
               </div>
             )}
             <div className="space-y-2">
