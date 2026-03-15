@@ -1,36 +1,26 @@
-# Billy 💰
+# Billy
 
-A self-hosted personal finance app for tracking household expenses, bills, loans, and cost splits between members. Built to run on TrueNAS (or any Docker host).
+Self-hosted personal finance tracker. Track household expenses, bills, loans, and spending across multiple people.
 
-![Docker](https://img.shields.io/badge/docker-rhysdock%2Fbilly-blue)
+## Running with Docker
 
----
+### Quick start
 
-## Features
+```bash
+mkdir -p data
+docker compose up -d
+```
 
-- **Expenses** — recurring bills with schedules (weekly, fortnightly, monthly, quarterly, annually, one-time, irregular)
-- **Variable & irregular billing** — log actual bills, Billy averages them for budgeting
-- **Cost splits** — split expenses between household members by percentage
-- **Payment groups** — reusable split presets, update once and it applies everywhere
-- **Members** — per-member monthly/weekly/fortnightly/annual cost breakdown
-- **Loans** — mortgage/loan tracker with extra repayment simulator and payoff chart
-- **Categories** — group expenses with colour-coded categories
-- **Reports** — spending projections and category breakdowns
-- **API** — REST API with optional key auth for automation (n8n, Claude, etc.)
-- **Backup/Restore** — download and upload your SQLite database from the UI
+Open http://localhost:3000
 
----
+### On TrueNAS (or any server)
 
-## Quick Start (TrueNAS / Docker)
-
-### 1. Create a data directory
-
+1. Create a folder for Billy data:
 ```bash
 mkdir -p /mnt/tank/apps/billy/data
 ```
 
-### 2. Create a `docker-compose.yml`
-
+2. Create a `docker-compose.yml` in that folder:
 ```yaml
 services:
   billy:
@@ -40,110 +30,104 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - /mnt/tank/apps/billy/data:/data
+      - ./data:/data
     environment:
       - DB_PATH=/data/billy.db
       - PORT=3000
-      # Optional: protect all API endpoints with a key
-      # - API_KEY=your-secret-key-here
 ```
 
-### 3. Start it
-
+3. Start it:
 ```bash
+cd /mnt/tank/apps/billy
 docker compose up -d
 ```
 
-### 4. Open Billy
+4. Open `http://your-server-ip:3000`
 
-```
-http://your-server-ip:3000
-```
-
----
-
-## Migrating existing data
-
-1. In Billy → Settings → **Download Backup**
-2. Copy the `.db` file to your data directory:
-```bash
-scp billy-backup.db user@your-server:/mnt/tank/apps/billy/data/billy.db
-```
-3. Restart: `docker compose restart`
-
----
+The SQLite database lives at `./data/billy.db`. Back it up by copying that file, or use the download/upload in Settings.
 
 ## API
 
-Billy has a REST API for automation — useful for logging bills automatically from n8n, Claude, or any HTTP client.
-
 ### Authentication
 
-Set an API key in Settings → API Key (or via `API_KEY` env var). Include it on all requests:
+Generate an API key from **Settings -> API Key**. Include it on every request:
 
 ```
 X-API-Key: your-key-here
 ```
 
-If no key is configured, all endpoints are open.
+The `/api/settings` endpoint is always public.
 
-### Log a bill by name
+### Endpoints
 
-The main automation endpoint — finds an expense by name and adds a bill entry in one shot.
-
-```bash
-curl -X POST http://your-server:3000/api/expenses/log \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: your-key" \
-  -d '{"name": "Power", "amount": 187.50, "date": "2026-03-15", "notes": "AGL March"}'
+#### Expenses
+```
+GET    /api/expenses
+POST   /api/expenses
+PUT    /api/expenses/:id
+DELETE /api/expenses/:id
 ```
 
-If the name doesn't match, the response includes a list of all available expense names.
+#### Bill Entries
+```
+GET    /api/expenses/:id/entries
+POST   /api/expenses/:id/entries
+DELETE /api/expenses/:id/entries/:entryId
+```
 
-### Other endpoints
+#### Log a bill (automation shortcut)
+```
+POST /api/log-bill
+{ "name": "AGL Power", "amount": 187.50, "date": "2026-03-15", "notes": "March bill" }
+```
+Matches by expense name. Returns expense list if no match found.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/expenses` | List all expenses (supports `?q=name` search) |
-| `POST` | `/api/expenses` | Create a new expense |
-| `POST` | `/api/expenses/:id/entries` | Add a bill entry by expense ID |
-| `GET` | `/api/members` | List members |
-| `GET` | `/api/categories` | List categories |
-| `GET` | `/api/payment-groups` | List payment groups |
-| `GET` | `/api/summary` | Get cost summary |
-| `GET` | `/api/backup` | Download database backup |
+#### Members
+```
+GET    /api/members
+POST   /api/members
+PUT    /api/members/:id
+DELETE /api/members/:id
+```
 
-Full API documentation is also available in the app under **Settings → API Reference**.
+#### Loans
+```
+GET    /api/loans
+POST   /api/loans
+PUT    /api/loans/:id
+DELETE /api/loans/:id
+```
 
----
+#### Payment Groups
+```
+GET    /api/payment-groups
+POST   /api/payment-groups
+PUT    /api/payment-groups/:id
+DELETE /api/payment-groups/:id
+POST   /api/payment-groups/:id/assign   { "expense_ids": [1, 2, 3] }
+```
 
-## Environment Variables
+#### Summary
+```
+GET /api/summary
+```
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3000` | Port to listen on |
-| `DB_PATH` | `/data/billy.db` | Path to SQLite database |
-| `API_KEY` | — | Optional API key (overrides DB-configured key) |
+#### Settings
+```
+GET  /api/settings
+POST /api/settings/generate-key
+POST /api/settings/clear-key
+```
 
----
+#### Backup & Restore
+```
+GET  /api/backup
+POST /api/restore
+```
 
 ## Development
 
 ```bash
-# Backend
 cd backend && npm install && node server.js
-
-# Frontend (separate terminal)
 cd frontend && npm install && npm run dev
 ```
-
-Frontend runs on `:5173` and proxies API calls to `:3000`.
-
----
-
-## Stack
-
-- **Backend** — Node.js + Express + better-sqlite3
-- **Frontend** — React 18 + Vite + Tailwind CSS + Recharts
-- **Database** — SQLite (single file, easy to backup)
-- **Container** — Docker multi-stage build
