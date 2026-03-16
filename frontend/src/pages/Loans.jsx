@@ -4,7 +4,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
 } from 'recharts';
-import { Plus, Pencil, Trash2, X, TrendingDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, TrendingDown, Link, Search } from 'lucide-react';
 import { api } from '../api.js';
 
 const fmt = (n) => n?.toLocaleString('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: 0, maximumFractionDigits: 0 }) ?? '$0';
@@ -61,6 +61,98 @@ function monthsToYears(months) {
   return y > 0 ? `${y}y ${m}m` : `${m}m`;
 }
 
+// Modal to browse and pick a single expense
+function ExpensePickerModal({ expenses, onSelect, onClose }) {
+  const [search, setSearch] = useState('');
+  const filtered = expenses.filter(e => e.name.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._closeOnUp = true; }}
+      onMouseUp={(e) => { if (e.currentTarget._closeOnUp) { e.currentTarget._closeOnUp = false; onClose(); } }}>
+      <div className="bg-slate-900 rounded-2xl border border-slate-700 w-full max-w-sm">
+        <div className="flex items-center justify-between p-4 border-b border-slate-800">
+          <h3 className="font-semibold text-sm">Link Expense</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200"><X size={18} /></button>
+        </div>
+        <div className="p-3 border-b border-slate-800">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-2.5 text-slate-500" />
+            <input
+              autoFocus
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+              placeholder="Search expenses..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="max-h-64 overflow-y-auto p-2">
+          {filtered.length === 0 && <p className="text-slate-500 text-sm text-center py-4">No expenses found</p>}
+          {filtered.map(exp => (
+            <button
+              key={exp.id}
+              onClick={() => { onSelect(exp); onClose(); }}
+              className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-800 flex items-center justify-between group"
+            >
+              <span className="text-sm">{exp.name}</span>
+              <span className="text-xs text-slate-500">{exp.schedule} · {fmt2(exp.amount)}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// A payment field that can be either a manual amount or linked to an expense
+function LinkedPaymentField({ label, amount, expenseId, expenses, onAmountChange, onLink, onUnlink }) {
+  const [showPicker, setShowPicker] = useState(false);
+  const linkedExp = expenseId ? expenses.find(e => e.id === expenseId) : null;
+
+  return (
+    <div>
+      <label className="block text-xs text-slate-400 mb-1">{label}</label>
+      {linkedExp ? (
+        <div className="flex items-center gap-2 bg-slate-800 border border-indigo-600/50 rounded-lg px-3 py-2">
+          <Link size={13} className="text-indigo-400 shrink-0" />
+          <span className="text-sm flex-1 truncate">{linkedExp.name}</span>
+          <span className="text-xs text-slate-500">{linkedExp.schedule}</span>
+          <button type="button" onClick={onUnlink} className="text-slate-500 hover:text-red-400 ml-1"><X size={13} /></button>
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <span className="absolute left-3 top-2 text-slate-400 text-sm">$</span>
+            <input
+              type="number" min="0" step="0.01"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+              value={amount}
+              onChange={e => onAmountChange(e.target.value)}
+              placeholder="0"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowPicker(true)}
+            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-400 hover:text-indigo-400 transition-colors"
+            title="Link to expense"
+          >
+            <Link size={14} />
+          </button>
+        </div>
+      )}
+      {showPicker && (
+        <ExpensePickerModal
+          expenses={expenses}
+          onSelect={(exp) => { onLink(exp.id); }}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
+    </div>
+  );
+}
+
 function LoanForm({ loan, expenses, onClose }) {
   const qc = useQueryClient();
   const isNew = !loan;
@@ -71,6 +163,8 @@ function LoanForm({ loan, expenses, onClose }) {
     interest_rate: loan?.interest_rate ?? '',
     monthly_payment: loan?.monthly_payment ?? '',
     extra_payment: loan?.extra_payment ?? 0,
+    monthly_expense_id: loan?.monthly_expense_id ?? null,
+    extra_expense_id: loan?.extra_expense_id ?? null,
     notes: loan?.notes ?? '',
     linked_expense_ids: loan?.linked_expense_ids ?? [],
   });
@@ -81,15 +175,7 @@ function LoanForm({ loan, expenses, onClose }) {
   });
 
   const f = (k) => ({ value: form[k], onChange: (e) => setForm(x => ({ ...x, [k]: e.target.value })) });
-
-  const toggleExpense = (id) => {
-    setForm(x => ({
-      ...x,
-      linked_expense_ids: x.linked_expense_ids.includes(id)
-        ? x.linked_expense_ids.filter(i => i !== id)
-        : [...x.linked_expense_ids, id],
-    }));
-  };
+  const set = (k, v) => setForm(x => ({ ...x, [k]: v }));
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
@@ -107,8 +193,8 @@ function LoanForm({ loan, expenses, onClose }) {
               ...form,
               balance: parseFloat(form.balance),
               interest_rate: parseFloat(form.interest_rate),
-              monthly_payment: parseFloat(form.monthly_payment),
-              extra_payment: parseFloat(form.extra_payment) || 0,
+              monthly_payment: form.monthly_expense_id ? 0 : (parseFloat(form.monthly_payment) || 0),
+              extra_payment: form.extra_expense_id ? 0 : (parseFloat(form.extra_payment) || 0),
             });
           }}
           className="p-5 space-y-4"
@@ -137,44 +223,26 @@ function LoanForm({ loan, expenses, onClose }) {
               <span className="absolute right-3 top-2 text-slate-400 text-sm">%</span>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Monthly Payment *</label>
-              <div className="relative">
-                <span className="absolute left-3 top-2 text-slate-400 text-sm">$</span>
-                <input type="number" min="0" step="0.01" className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:border-indigo-500" placeholder="2800" required {...f('monthly_payment')} />
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Regular Extra</label>
-              <div className="relative">
-                <span className="absolute left-3 top-2 text-slate-400 text-sm">$</span>
-                <input type="number" min="0" step="0.01" className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:border-indigo-500" placeholder="0" {...f('extra_payment')} />
-              </div>
-            </div>
-          </div>
 
-          {/* Linked expenses */}
-          {expenses.length > 0 && (
-            <div>
-              <label className="block text-xs text-slate-400 mb-2">Linked Expenses</label>
-              <p className="text-xs text-slate-500 mb-2">Tick expenses that pay down this loan — Billy will estimate the current balance based on payments made since the balance date.</p>
-              <div className="space-y-1 max-h-40 overflow-y-auto">
-                {expenses.map(exp => (
-                  <label key={exp.id} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-800 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.linked_expense_ids.includes(exp.id)}
-                      onChange={() => toggleExpense(exp.id)}
-                      className="rounded"
-                    />
-                    <span className="text-sm">{exp.name}</span>
-                    <span className="text-xs text-slate-500 ml-auto">{exp.schedule}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
+          <LinkedPaymentField
+            label="Monthly Payment"
+            amount={form.monthly_payment}
+            expenseId={form.monthly_expense_id}
+            expenses={expenses}
+            onAmountChange={v => set('monthly_payment', v)}
+            onLink={id => set('monthly_expense_id', id)}
+            onUnlink={() => set('monthly_expense_id', null)}
+          />
+
+          <LinkedPaymentField
+            label="Extra Repayment"
+            amount={form.extra_payment}
+            expenseId={form.extra_expense_id}
+            expenses={expenses}
+            onAmountChange={v => set('extra_payment', v)}
+            onLink={id => set('extra_expense_id', id)}
+            onUnlink={() => set('extra_expense_id', null)}
+          />
 
           <div>
             <label className="block text-xs text-slate-400 mb-1">Notes</label>
@@ -193,20 +261,23 @@ function LoanForm({ loan, expenses, onClose }) {
 }
 
 function LoanCard({ loan, onEdit, onDelete }) {
-  const [simExtra, setSimExtra] = useState(loan.extra_payment);
+  const [simExtra, setSimExtra] = useState(loan.effective_extra ?? loan.extra_payment);
 
   const currentBalance = loan.current_balance ?? loan.balance;
-  const hasTracking = loan.balance_date && loan.linked_expense_ids?.length > 0;
+  const hasTracking = loan.balance_date && (loan.monthly_expense_id || loan.extra_expense_id || loan.linked_expense_ids?.length > 0);
   const paid = hasTracking ? Math.max(0, loan.balance - currentBalance) : 0;
 
-  const base = amortize(currentBalance, loan.interest_rate, loan.monthly_payment, loan.extra_payment);
-  const sim  = amortize(currentBalance, loan.interest_rate, loan.monthly_payment, parseFloat(simExtra) || 0);
+  const effectiveMonthly = loan.effective_monthly ?? loan.monthly_payment;
+  const effectiveExtra = loan.effective_extra ?? loan.extra_payment;
+
+  const base = amortize(currentBalance, loan.interest_rate, effectiveMonthly, effectiveExtra);
+  const sim  = amortize(currentBalance, loan.interest_rate, effectiveMonthly, parseFloat(simExtra) || 0);
 
   const monthsSaved = isFinite(base.months) && isFinite(sim.months) ? base.months - sim.months : 0;
   const interestSaved = isFinite(base.totalInterest) && isFinite(sim.totalInterest)
     ? base.totalInterest - sim.totalInterest : 0;
 
-  const simChanged = (parseFloat(simExtra) || 0) !== loan.extra_payment;
+  const simChanged = (parseFloat(simExtra) || 0) !== effectiveExtra;
 
   const chartData = base.schedule.map((pt, i) => ({
     label: pt.label,
@@ -216,7 +287,6 @@ function LoanCard({ loan, onEdit, onDelete }) {
 
   return (
     <div className="bg-slate-900 rounded-xl border border-slate-800">
-      {/* Header */}
       <div className="p-5 border-b border-slate-800">
         <div className="flex items-start justify-between">
           <div>
@@ -233,7 +303,7 @@ function LoanCard({ loan, onEdit, onDelete }) {
           <div className="bg-slate-800 rounded-lg p-3">
             <p className="text-xs text-slate-500">{hasTracking ? 'Est. Current Balance' : 'Balance'}</p>
             <p className="font-bold text-red-400 mt-0.5">{fmt(currentBalance)}</p>
-            {hasTracking && (
+            {hasTracking && paid > 0 && (
               <p className="text-xs text-slate-500 mt-0.5">{fmt(paid)} paid since {new Date(loan.balance_date).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' })}</p>
             )}
           </div>
@@ -243,12 +313,11 @@ function LoanCard({ loan, onEdit, onDelete }) {
           </div>
           <div className="bg-slate-800 rounded-lg p-3">
             <p className="text-xs text-slate-500">Monthly</p>
-            <p className="font-bold text-indigo-400 mt-0.5">{fmt2(loan.monthly_payment + loan.extra_payment)}</p>
+            <p className="font-bold text-indigo-400 mt-0.5">{fmt2(effectiveMonthly + effectiveExtra)}</p>
           </div>
         </div>
       </div>
 
-      {/* Payoff info */}
       <div className="p-5 border-b border-slate-800">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -264,11 +333,10 @@ function LoanCard({ loan, onEdit, onDelete }) {
         </div>
       </div>
 
-      {/* Extra payment simulator */}
       <div className="p-5 border-b border-slate-800">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-medium">Extra Repayment Simulator</p>
-          {simChanged && <span className="text-xs text-indigo-400">simulating only — edit loan to save</span>}
+          {simChanged && <span className="text-xs text-indigo-400">simulating only</span>}
         </div>
         <div className="flex items-center gap-3 mb-3">
           <span className="text-slate-400 text-sm">$</span>
@@ -314,7 +382,6 @@ function LoanCard({ loan, onEdit, onDelete }) {
         )}
       </div>
 
-      {/* Balance over time chart */}
       {chartData.length > 1 && (
         <div className="p-5">
           <p className="text-sm font-medium mb-3">Balance Over Time</p>
@@ -373,7 +440,6 @@ export default function Loans() {
             onDelete={() => { if (confirm(`Delete "${loan.name}"?`)) deleteMut.mutate(loan.id); }}
           />
         ))}
-
         {!isLoading && loans.length === 0 && (
           <div className="text-center py-16 text-slate-500">
             <TrendingDown size={40} className="mx-auto mb-3 opacity-30" />
