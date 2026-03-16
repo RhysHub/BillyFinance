@@ -8,6 +8,7 @@ import { existsSync } from 'fs';
 import { db } from './db.js';
 
 import membersRouter from './routes/members.js';
+import savingsGoalsRouter from './routes/savings_goals.js';
 import loansRouter from './routes/loans.js';
 import paymentGroupsRouter from './routes/payment_groups.js';
 import categoriesRouter from './routes/categories.js';
@@ -29,8 +30,8 @@ app.use('/api', (req, res, next) => {
   if (req.path.startsWith('/settings')) return next();
   const activeKey = API_KEY || getDbKey();
   if (!activeKey) return next();
-  const provided = req.headers['x-api-key'];
-  if (provided !== activeKey) return res.status(401).json({ error: 'Unauthorized — include X-API-Key header' });
+  const provided = req.headers['authorization']?.replace(/^Bearer\s+/i, '');
+  if (provided !== activeKey) return res.status(401).json({ error: 'Unauthorized — include Authorization: Bearer <key> header' });
   next();
 });
 
@@ -63,6 +64,7 @@ app.use('/api/categories', categoriesRouter);
 app.use('/api/expenses', expensesRouter);
 app.use('/api', summaryRouter);
 app.use('/api/loans', loansRouter);
+app.use('/api/savings-goals', savingsGoalsRouter);
 app.use('/api/payment-groups', paymentGroupsRouter);
 
 // Serve built frontend

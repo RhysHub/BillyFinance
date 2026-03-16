@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard.jsx';
 import Expenses from './pages/Expenses.jsx';
 import Members from './pages/Members.jsx';
 import Loans from './pages/Loans.jsx';
+import SavingsGoals from './pages/SavingsGoals.jsx';
 import Reports from './pages/Reports.jsx';
 import Settings from './pages/Settings.jsx';
 
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="expenses" element={<Expenses />} />
           <Route path="members" element={<Members />} />
           <Route path="loans" element={<Loans />} />
+          <Route path="savings-goals" element={<SavingsGoals />} />
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />
         </Route>

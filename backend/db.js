@@ -180,6 +180,30 @@ db.exec(`
   );
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS savings_goals (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+    name TEXT NOT NULL,
+    target_amount REAL NOT NULL,
+    current_amount REAL NOT NULL DEFAULT 0,
+    current_amount_date TEXT,
+    monthly_contribution REAL NOT NULL DEFAULT 0,
+    contribution_schedule TEXT NOT NULL DEFAULT 'MONTHLY',
+    contribution_expense_id TEXT REFERENCES expenses(id) ON DELETE SET NULL,
+    color TEXT NOT NULL DEFAULT '#6366f1',
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+`);
+
+const goalCols = db.pragma('table_info(savings_goals)').map(c => c.name);
+if (!goalCols.includes('contribution_schedule')) db.exec("ALTER TABLE savings_goals ADD COLUMN contribution_schedule TEXT NOT NULL DEFAULT 'MONTHLY'");
+
+// Add income columns to members if missing
+const memberCols = db.pragma('table_info(members)').map(c => c.name);
+if (!memberCols.includes('income_amount')) db.exec('ALTER TABLE members ADD COLUMN income_amount REAL');
+if (!memberCols.includes('income_schedule')) db.exec("ALTER TABLE members ADD COLUMN income_schedule TEXT DEFAULT 'MONTHLY'");
+
 // Seed default categories on first run
 const { n } = db.prepare('SELECT COUNT(*) as n FROM categories').get();
 if (n === 0) {

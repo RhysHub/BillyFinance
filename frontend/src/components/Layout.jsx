@@ -1,13 +1,14 @@
 import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutDashboard, Receipt, Users, BarChart3, TrendingDown, Settings } from 'lucide-react';
+import { LayoutDashboard, Receipt, Users, BarChart3, TrendingDown, Settings, PiggyBank } from 'lucide-react';
 
 const navItems = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/expenses',  icon: Receipt,         label: 'Expenses' },
-  { to: '/members',   icon: Users,           label: 'Members' },
-  { to: '/loans',     icon: TrendingDown,    label: 'Loans' },
-  { to: '/reports',   icon: BarChart3,       label: 'Reports' },
-  { to: '/settings',  icon: Settings,        label: 'Settings' },
+  { to: '/dashboard',      icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/expenses',       icon: Receipt,         label: 'Expenses' },
+  { to: '/members',        icon: Users,           label: 'Members' },
+  { to: '/loans',          icon: TrendingDown,    label: 'Loans' },
+  { to: '/savings-goals',  icon: PiggyBank,       label: 'Savings' },
+  { to: '/reports',        icon: BarChart3,       label: 'Reports' },
+  { to: '/settings',       icon: Settings,        label: 'Settings' },
 ];
 
 export default function Layout() {

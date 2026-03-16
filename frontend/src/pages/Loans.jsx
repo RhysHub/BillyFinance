@@ -4,12 +4,25 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
 } from 'recharts';
-import { Plus, Pencil, Trash2, X, TrendingDown, Link, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, TrendingDown, Link, Search, ChevronDown, ChevronUp, Settings, Eye, EyeOff } from 'lucide-react';
 import { api } from '../api.js';
 
 const fmt = (n) => n?.toLocaleString('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: 0, maximumFractionDigits: 0 }) ?? '$0';
 const fmt2 = (n) => n?.toLocaleString('en-AU', { style: 'currency', currency: 'AUD' }) ?? '$0.00';
 const tooltipStyle = { background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', color: '#f1f5f9' };
+
+// Simulate N months of payments, return resulting balance
+function simulateBalance(initialBalance, annualRate, monthlyPayment, months) {
+  const r = annualRate / 100 / 12;
+  let balance = initialBalance;
+  for (let i = 0; i < months && balance > 0.01; i++) {
+    const interest = balance * r;
+    const principal = monthlyPayment - interest;
+    if (principal <= 0) break;
+    balance = Math.max(0, balance - principal);
+  }
+  return balance;
+}
 
 function amortize(balance, annualRate, monthlyPayment, extraMonthly = 0) {
   const r = annualRate / 100 / 12;
@@ -248,7 +261,7 @@ function LoanForm({ loan, expenses, onClose }) {
           </div>
 
           <LinkedPaymentField
-            label="Monthly Payment"
+            label="Min. Monthly Repayment"
             amount={form.monthly_payment}
             expenseId={form.monthly_expense_id}
             expenses={expenses}
@@ -283,6 +296,40 @@ function LoanForm({ loan, expenses, onClose }) {
   );
 }
 
+// "What extra do I need to pay off in N years?" calculator
+function TargetPayoffCalc({ balance, rate, currentTotal }) {
+  const [targetYears, setTargetYears] = useState('');
+  const required = targetYears ? minPayment(balance, rate, parseFloat(targetYears)) : null;
+  const extraNeeded = required !== null ? Math.max(0, required - currentTotal) : null;
+
+  return (
+    <div className="border-t border-slate-800 pt-4">
+      <p className="text-xs text-slate-400 mb-2">Target payoff calculator</p>
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-slate-500">Pay off in</span>
+        <div className="relative w-24">
+          <input
+            type="number" min="1" max="50" step="1"
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 pr-8 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
+            value={targetYears}
+            onChange={e => setTargetYears(e.target.value)}
+            placeholder="10"
+          />
+          <span className="absolute right-2 top-1.5 text-xs text-slate-500">yrs</span>
+        </div>
+        {extraNeeded !== null && (
+          <span className="text-sm">
+            {extraNeeded > 0
+              ? <><span className="text-slate-400">pay extra </span><span className="font-semibold text-indigo-400">{(0 + extraNeeded).toLocaleString('en-AU', { style: 'currency', currency: 'AUD' })}/mo</span></>
+              : <span className="text-emerald-400 text-xs">Already on track with current payments</span>
+            }
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Calculate minimum required payment for a given principal, rate, term
 function minPayment(principal, annualRate, termYears) {
   const r = annualRate / 100 / 12;
@@ -291,8 +338,46 @@ function minPayment(principal, annualRate, termYears) {
   return principal * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
 }
 
+const STAT_MODULES = [
+  { id: 'aheadPrincipal',      label: 'Ahead on principal',          defaultOn: true,  note: 'Requires initial balance + start date' },
+  { id: 'timeSaved',           label: 'Time saved off loan',          defaultOn: true,  note: 'Requires initial balance + start date' },
+  { id: 'interestSavedToDate', label: 'Interest saved to date',       defaultOn: true,  note: 'Requires initial balance + start date' },
+  { id: 'totalInterestSaved',  label: 'Total interest saved on track',defaultOn: true,  note: 'Requires initial balance + start date' },
+  { id: 'dailyInterest',       label: 'Daily interest cost',          defaultOn: false },
+  { id: 'thisMonthInterest',   label: "This month's interest charge",  defaultOn: false },
+  { id: 'principalThisMonth',  label: 'Principal paid this month',    defaultOn: false },
+  { id: 'equity',              label: 'Equity / principal paid',      defaultOn: false, note: 'Requires initial balance' },
+  { id: 'totalPaidEstimate',   label: 'Total paid to date',           defaultOn: false, note: 'Requires initial balance + start date' },
+  { id: 'payoffAtMin',         label: 'Payoff if no extra payments',  defaultOn: false },
+  { id: 'interestRemaining',   label: 'Interest remaining',           defaultOn: false },
+  { id: 'ltvRatio',            label: '% of loan remaining',          defaultOn: false, note: 'Requires initial balance' },
+  { id: 'monthlyInterestRatio',label: 'Interest share of payment',    defaultOn: false },
+];
+
+const DEFAULT_STATS = Object.fromEntries(STAT_MODULES.map(m => [m.id, m.defaultOn]));
+
+function loadStatsConfig() {
+  try {
+    const saved = localStorage.getItem('billy_loan_stats');
+    return saved ? { ...DEFAULT_STATS, ...JSON.parse(saved) } : { ...DEFAULT_STATS };
+  } catch { return { ...DEFAULT_STATS }; }
+}
+
 function LoanCard({ loan, onEdit, onDelete }) {
-  const [simExtra, setSimExtra] = useState(loan.effective_extra ?? loan.extra_payment);
+  const [simOpen, setSimOpen] = useState(false);
+  const [simExtra, setSimExtra] = useState(0);
+  const [simLump, setSimLump] = useState('');
+  const [simRate, setSimRate] = useState('');
+  const [statsConfig, setStatsConfig] = useState(loadStatsConfig);
+  const [statsSettingsOpen, setStatsSettingsOpen] = useState(false);
+
+  function toggleStat(id) {
+    setStatsConfig(prev => {
+      const next = { ...prev, [id]: !prev[id] };
+      try { localStorage.setItem('billy_loan_stats', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
 
   const currentBalance = loan.current_balance ?? loan.balance;
   const hasTracking = loan.balance_date && (loan.monthly_expense_id || loan.extra_expense_id || loan.linked_expense_ids?.length > 0);
@@ -302,25 +387,70 @@ function LoanCard({ loan, onEdit, onDelete }) {
   const effectiveExtra = loan.effective_extra ?? loan.extra_payment;
 
   const base = amortize(currentBalance, loan.interest_rate, effectiveMonthly, effectiveExtra);
-  const sim  = amortize(currentBalance, loan.interest_rate, effectiveMonthly, parseFloat(simExtra) || 0);
+  const lump = parseFloat(simLump) || 0;
+  const extraSim = (parseFloat(simExtra) || 0);
+  const rateSim = parseFloat(simRate) || loan.interest_rate;
+  const simBalance = Math.max(0, currentBalance - lump);
+  const sim = amortize(simBalance, rateSim, effectiveMonthly, effectiveExtra + extraSim);
 
-  // Lifetime comparison: minimum vs actual payments from initial balance
-  const hasLifetime = loan.initial_balance && loan.loan_term_years;
-  const minPmt = hasLifetime ? minPayment(loan.initial_balance, loan.interest_rate, loan.loan_term_years) : 0;
-  const minScenario = hasLifetime ? amortize(loan.initial_balance, loan.interest_rate, minPmt) : null;
-  const actualScenario = hasLifetime ? amortize(loan.initial_balance, loan.interest_rate, effectiveMonthly, effectiveExtra) : null;
-  const lifetimeInterestSaved = hasLifetime && minScenario && actualScenario && isFinite(actualScenario.totalInterest)
-    ? minScenario.totalInterest - actualScenario.totalInterest : null;
-  const lifetimeTimeSaved = hasLifetime && minScenario && actualScenario && isFinite(actualScenario.months)
-    ? minScenario.months - actualScenario.months : null;
-  const lifetimeTotalMin = hasLifetime && minScenario ? loan.initial_balance + minScenario.totalInterest : null;
-  const lifetimeTotalActual = hasLifetime && actualScenario && isFinite(actualScenario.totalInterest) ? loan.initial_balance + actualScenario.totalInterest : null;
+  // Lifetime comparison: where would the balance be right now if only minimum was ever paid?
+  const hasLifetime = loan.initial_balance && loan.start_date;
+  const minPmt = effectiveMonthly;
+
+  const monthsElapsed = hasLifetime ? (() => {
+    const start = new Date(loan.start_date);
+    const now = new Date();
+    return Math.max(0, (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()));
+  })() : 0;
+
+  // Simulate where balance would be today if only ever paid minimum
+  const minOnlyBalanceNow = hasLifetime
+    ? simulateBalance(loan.initial_balance, loan.interest_rate, minPmt, monthsElapsed)
+    : null;
+
+  // Project forward from today
+  const minRemainingScenario = minOnlyBalanceNow != null ? amortize(minOnlyBalanceNow, loan.interest_rate, minPmt) : null;
+  const actualRemainingScenario = hasLifetime ? amortize(currentBalance, loan.interest_rate, minPmt) : null;
+  const actualWithExtraScenario = hasLifetime ? amortize(currentBalance, loan.interest_rate, minPmt, effectiveExtra) : null;
+
+  const aheadBy = minOnlyBalanceNow != null ? Math.max(0, minOnlyBalanceNow - currentBalance) : null;
+  const lifetimeTimeSaved = minRemainingScenario && actualWithExtraScenario && isFinite(actualWithExtraScenario.months)
+    ? minRemainingScenario.months - actualWithExtraScenario.months : null;
+
+  // Interest saved to date: what min-only path paid in interest vs what you actually paid
+  const principalPaidSoFar = hasLifetime ? Math.max(0, loan.initial_balance - currentBalance) : 0;
+  const originalInterestSoFar = minOnlyBalanceNow != null
+    ? monthsElapsed * minPmt - (loan.initial_balance - minOnlyBalanceNow) : null;
+  const actualInterestSoFar = hasLifetime
+    ? monthsElapsed * (minPmt + effectiveExtra) - principalPaidSoFar : null;
+  const interestSavedToDate = originalInterestSoFar != null && actualInterestSoFar != null
+    ? originalInterestSoFar - actualInterestSoFar : null;
+
+  // Total interest saved on current track (past savings + future savings vs min-only path)
+  const totalInterestMinOnly = originalInterestSoFar != null && minRemainingScenario
+    ? originalInterestSoFar + minRemainingScenario.totalInterest : null;
+  const totalInterestOnTrack = actualInterestSoFar != null && isFinite(base.totalInterest)
+    ? Math.max(0, actualInterestSoFar) + base.totalInterest : null;
+  const totalInterestSaved = totalInterestMinOnly != null && totalInterestOnTrack != null
+    ? totalInterestMinOnly - totalInterestOnTrack : null;
+
+  // Additional stat computations
+  const r = loan.interest_rate / 100 / 12;
+  const thisMonthInterest = currentBalance * r;
+  const principalThisMonth = Math.max(0, (effectiveMonthly + effectiveExtra) - thisMonthInterest);
+  const dailyInterest = currentBalance * loan.interest_rate / 100 / 365;
+  const equity = loan.initial_balance ? Math.max(0, loan.initial_balance - currentBalance) : null;
+  const ltvRatio = loan.initial_balance ? (currentBalance / loan.initial_balance) * 100 : null;
+  const totalPaidEstimate = hasLifetime ? monthsElapsed * (minPmt + effectiveExtra) : null;
+  const monthlyInterestRatio = (effectiveMonthly + effectiveExtra) > 0
+    ? (thisMonthInterest / (effectiveMonthly + effectiveExtra)) * 100 : null;
 
   const monthsSaved = isFinite(base.months) && isFinite(sim.months) ? base.months - sim.months : 0;
   const interestSaved = isFinite(base.totalInterest) && isFinite(sim.totalInterest)
     ? base.totalInterest - sim.totalInterest : 0;
 
-  const simChanged = (parseFloat(simExtra) || 0) !== effectiveExtra;
+  const rateChanged = simRate !== '' && rateSim !== loan.interest_rate;
+  const simChanged = extraSim > 0 || lump > 0 || rateChanged;
 
   const chartData = base.schedule.map((pt, i) => ({
     label: pt.label,
@@ -394,84 +524,223 @@ function LoanCard({ loan, onEdit, onDelete }) {
         </div>
       </div>
 
-      {hasLifetime && lifetimeInterestSaved !== null && (
-        <div className="p-5 border-b border-slate-800">
-          <p className="text-sm font-medium mb-3">Lifetime Savings vs Minimum Repayments</p>
-          <p className="text-xs text-slate-500 mb-3">
-            Minimum payment on {fmt(loan.initial_balance)} over {loan.loan_term_years} years: <span className="text-slate-300">{fmt2(minPmt)}/mo</span>
-            {' · '}Your payment: <span className="text-slate-300">{fmt2(effectiveMonthly + effectiveExtra)}/mo</span>
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-slate-800 rounded-lg p-3">
-              <p className="text-xs text-slate-500 mb-1">Total cost at minimum</p>
-              <p className="font-semibold text-orange-400">{fmt(lifetimeTotalMin)}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{fmt(minScenario.totalInterest)} interest</p>
-            </div>
-            <div className="bg-slate-800 rounded-lg p-3">
-              <p className="text-xs text-slate-500 mb-1">Total cost at your payments</p>
-              <p className="font-semibold text-indigo-400">{fmt(lifetimeTotalActual)}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{fmt(actualScenario.totalInterest)} interest</p>
-            </div>
-            <div className="bg-emerald-900/30 border border-emerald-800/50 rounded-lg p-3">
-              <p className="text-xs text-emerald-500 mb-1">Interest saved</p>
-              <p className="font-semibold text-emerald-400">{fmt(lifetimeInterestSaved)}</p>
-              <p className="text-xs text-emerald-500 mt-0.5">vs minimum repayments</p>
-            </div>
-            <div className="bg-emerald-900/30 border border-emerald-800/50 rounded-lg p-3">
-              <p className="text-xs text-emerald-500 mb-1">Time saved</p>
-              <p className="font-semibold text-emerald-400">{monthsToYears(lifetimeTimeSaved)}</p>
-              <p className="text-xs text-emerald-500 mt-0.5">paid off {monthsToYears(loan.loan_term_years * 12 - actualScenario.months)} early</p>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="p-5 border-b border-slate-800">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-medium">Extra Repayment Simulator</p>
-          {simChanged && <span className="text-xs text-indigo-400">simulating only</span>}
-        </div>
-        <div className="flex items-center gap-3 mb-3">
-          <span className="text-slate-400 text-sm">$</span>
-          <input
-            type="number" min="0" step="50"
-            className="w-32 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
-            value={simExtra}
-            onChange={e => setSimExtra(e.target.value)}
-          />
-          <span className="text-slate-400 text-sm">extra / month</span>
+          <p className="text-sm font-medium">Loan Stats</p>
+          <button
+            onClick={() => setStatsSettingsOpen(o => !o)}
+            className="p-1 text-slate-500 hover:text-slate-300 rounded transition-colors"
+            title="Configure stats"
+          >
+            <Settings size={14} />
+          </button>
         </div>
 
-        {isFinite(sim.months) && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-slate-800 rounded-lg p-3">
-              <p className="text-xs text-slate-500 mb-1">Payoff date</p>
-              <p className="font-semibold text-emerald-400">{payoffDate(sim.months)}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{monthsToYears(sim.months)} remaining</p>
+        {statsSettingsOpen && (
+          <div className="mb-4 bg-slate-800 rounded-xl p-3 border border-slate-700">
+            <p className="text-xs text-slate-400 mb-2 font-medium">Show / hide stats</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {STAT_MODULES.map(m => (
+                <button key={m.id} onClick={() => toggleStat(m.id)} className="flex items-center gap-2 text-left group">
+                  {statsConfig[m.id]
+                    ? <Eye size={13} className="text-indigo-400 shrink-0" />
+                    : <EyeOff size={13} className="text-slate-600 shrink-0" />}
+                  <span className={`text-xs ${statsConfig[m.id] ? 'text-slate-300' : 'text-slate-600'} group-hover:text-slate-100 transition-colors`}>{m.label}</span>
+                </button>
+              ))}
             </div>
-            <div className="bg-slate-800 rounded-lg p-3">
-              <p className="text-xs text-slate-500 mb-1">Total interest</p>
-              <p className="font-semibold text-orange-400">{fmt(sim.totalInterest)}</p>
-              <p className="text-xs text-slate-500 mt-0.5">over loan life</p>
-            </div>
-            {simChanged && monthsSaved > 0 && (
-              <>
-                <div className="bg-emerald-900/30 border border-emerald-800/50 rounded-lg p-3">
-                  <p className="text-xs text-emerald-500 mb-1">Time saved</p>
-                  <p className="font-semibold text-emerald-400">{monthsToYears(monthsSaved)}</p>
-                  <p className="text-xs text-emerald-500 mt-0.5">vs current payments</p>
-                </div>
-                <div className="bg-emerald-900/30 border border-emerald-800/50 rounded-lg p-3">
-                  <p className="text-xs text-emerald-500 mb-1">Interest saved</p>
-                  <p className="font-semibold text-emerald-400">{fmt(interestSaved)}</p>
-                  <p className="text-xs text-emerald-500 mt-0.5">vs current payments</p>
-                </div>
-              </>
-            )}
           </div>
         )}
-        {simChanged && !isFinite(sim.months) && (
-          <p className="text-red-400 text-sm">Payment too low to cover interest</p>
+
+        {(() => {
+          const statBoxes = {
+            aheadPrincipal: aheadBy != null && (
+              <div className="bg-emerald-900/30 border border-emerald-800/50 rounded-lg p-3">
+                <p className="text-xs text-emerald-500 mb-1">Ahead on principal</p>
+                <p className="font-semibold text-emerald-400">{fmt(aheadBy)}</p>
+                <p className="text-xs text-emerald-600 mt-0.5">below min-only balance now</p>
+              </div>
+            ),
+            timeSaved: lifetimeTimeSaved != null && (
+              <div className="bg-emerald-900/30 border border-emerald-800/50 rounded-lg p-3">
+                <p className="text-xs text-emerald-500 mb-1">Time saved off loan</p>
+                <p className="font-semibold text-emerald-400">{monthsToYears(lifetimeTimeSaved)}</p>
+                <p className="text-xs text-emerald-600 mt-0.5">at current pace from here</p>
+              </div>
+            ),
+            interestSavedToDate: interestSavedToDate != null && (
+              <div className="bg-emerald-900/30 border border-emerald-800/50 rounded-lg p-3">
+                <p className="text-xs text-emerald-500 mb-1">Interest saved to date</p>
+                <p className="font-semibold text-emerald-400">{fmt(interestSavedToDate)}</p>
+                <p className="text-xs text-emerald-600 mt-0.5">vs min-only path so far</p>
+              </div>
+            ),
+            totalInterestSaved: totalInterestSaved != null && (
+              <div className="bg-emerald-900/30 border border-emerald-800/50 rounded-lg p-3">
+                <p className="text-xs text-emerald-500 mb-1">Total interest saved</p>
+                <p className="font-semibold text-emerald-400">{fmt(totalInterestSaved)}</p>
+                <p className="text-xs text-emerald-600 mt-0.5">on current track, full loan</p>
+              </div>
+            ),
+            dailyInterest: (
+              <div className="bg-slate-800 rounded-lg p-3">
+                <p className="text-xs text-slate-500 mb-1">Daily interest cost</p>
+                <p className="font-semibold text-orange-400">{fmt2(dailyInterest)}</p>
+                <p className="text-xs text-slate-600 mt-0.5">per day at current balance</p>
+              </div>
+            ),
+            thisMonthInterest: (
+              <div className="bg-slate-800 rounded-lg p-3">
+                <p className="text-xs text-slate-500 mb-1">Interest this month</p>
+                <p className="font-semibold text-orange-400">{fmt2(thisMonthInterest)}</p>
+                <p className="text-xs text-slate-600 mt-0.5">of your next payment</p>
+              </div>
+            ),
+            principalThisMonth: (
+              <div className="bg-slate-800 rounded-lg p-3">
+                <p className="text-xs text-slate-500 mb-1">Principal this month</p>
+                <p className="font-semibold text-indigo-400">{fmt2(principalThisMonth)}</p>
+                <p className="text-xs text-slate-600 mt-0.5">actually reducing your debt</p>
+              </div>
+            ),
+            equity: equity != null && (
+              <div className="bg-slate-800 rounded-lg p-3">
+                <p className="text-xs text-slate-500 mb-1">Equity built</p>
+                <p className="font-semibold text-indigo-400">{fmt(equity)}</p>
+                <p className="text-xs text-slate-600 mt-0.5">{ltvRatio != null ? `${(100 - ltvRatio).toFixed(1)}% owned` : 'principal paid off'}</p>
+              </div>
+            ),
+            totalPaidEstimate: totalPaidEstimate != null && (
+              <div className="bg-slate-800 rounded-lg p-3">
+                <p className="text-xs text-slate-500 mb-1">Total paid to date</p>
+                <p className="font-semibold text-slate-300">{fmt(totalPaidEstimate)}</p>
+                <p className="text-xs text-slate-600 mt-0.5">est. over {monthsElapsed} months</p>
+              </div>
+            ),
+            payoffAtMin: actualRemainingScenario && (
+              <div className="bg-slate-800 rounded-lg p-3">
+                <p className="text-xs text-slate-500 mb-1">Payoff if no extras</p>
+                <p className="font-semibold text-slate-300">{payoffDate(actualRemainingScenario.months)}</p>
+                <p className="text-xs text-slate-600 mt-0.5">{monthsToYears(actualRemainingScenario.months)} at min only</p>
+              </div>
+            ),
+            interestRemaining: isFinite(base.totalInterest) && (
+              <div className="bg-slate-800 rounded-lg p-3">
+                <p className="text-xs text-slate-500 mb-1">Interest remaining</p>
+                <p className="font-semibold text-orange-400">{fmt(base.totalInterest)}</p>
+                <p className="text-xs text-slate-600 mt-0.5">at current pace</p>
+              </div>
+            ),
+            ltvRatio: ltvRatio != null && (
+              <div className="bg-slate-800 rounded-lg p-3">
+                <p className="text-xs text-slate-500 mb-1">Loan remaining</p>
+                <p className="font-semibold text-slate-300">{ltvRatio.toFixed(1)}%</p>
+                <p className="text-xs text-slate-600 mt-0.5">of original amount</p>
+              </div>
+            ),
+            monthlyInterestRatio: monthlyInterestRatio != null && (
+              <div className="bg-slate-800 rounded-lg p-3">
+                <p className="text-xs text-slate-500 mb-1">Interest share</p>
+                <p className="font-semibold text-slate-300">{monthlyInterestRatio.toFixed(1)}%</p>
+                <p className="text-xs text-slate-600 mt-0.5">of your payment is interest</p>
+              </div>
+            ),
+          };
+
+          const visible = STAT_MODULES.filter(m => statsConfig[m.id] && statBoxes[m.id]);
+          if (visible.length === 0) return <p className="text-xs text-slate-600">No stats selected — click the cog to add some.</p>;
+          return <div className="grid grid-cols-2 gap-3">{visible.map(m => <div key={m.id}>{statBoxes[m.id]}</div>)}</div>;
+        })()}
+      </div>
+
+      <div className="border-b border-slate-800">
+        <button
+          className="w-full flex items-center justify-between p-5 text-left hover:bg-slate-800/30 transition-colors"
+          onClick={() => setSimOpen(o => !o)}
+        >
+          <span className="text-sm font-medium">Repayment Simulator</span>
+          <div className="flex items-center gap-2">
+            {simChanged && <span className="text-xs text-indigo-400">active</span>}
+            {simOpen ? <ChevronUp size={15} className="text-slate-500" /> : <ChevronDown size={15} className="text-slate-500" />}
+          </div>
+        </button>
+
+        {simOpen && (
+          <div className="px-5 pb-5 space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Extra per month</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-slate-400 text-sm">$</span>
+                  <input type="number" min="0" step="50"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                    value={simExtra} onChange={e => setSimExtra(e.target.value)} placeholder="0" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">One-off lump sum</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-slate-400 text-sm">$</span>
+                  <input type="number" min="0" step="1000"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                    value={simLump} onChange={e => setSimLump(e.target.value)} placeholder="0" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Interest rate
+                  <span className="text-slate-600 ml-1">({loan.interest_rate}% now)</span>
+                </label>
+                <div className="relative">
+                  <input type="number" min="0" max="30" step="0.25"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 pr-7 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                    value={simRate} onChange={e => setSimRate(e.target.value)} placeholder={loan.interest_rate} />
+                  <span className="absolute right-2 top-2 text-xs text-slate-500">%</span>
+                </div>
+              </div>
+            </div>
+
+            {rateChanged && (
+              <div className={`text-xs px-3 py-2 rounded-lg ${rateSim > loan.interest_rate ? 'bg-red-900/30 text-red-400' : 'bg-emerald-900/30 text-emerald-400'}`}>
+                Rate {rateSim > loan.interest_rate ? '▲' : '▼'} {Math.abs(rateSim - loan.interest_rate).toFixed(2)}% →
+                new monthly interest charge: {fmt2(simBalance * rateSim / 100 / 12)}
+              </div>
+            )}
+
+            {isFinite(sim.months) && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-800 rounded-lg p-3">
+                  <p className="text-xs text-slate-500 mb-1">Payoff date</p>
+                  <p className="font-semibold text-emerald-400">{payoffDate(sim.months)}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{monthsToYears(sim.months)} remaining</p>
+                </div>
+                <div className="bg-slate-800 rounded-lg p-3">
+                  <p className="text-xs text-slate-500 mb-1">Total interest</p>
+                  <p className="font-semibold text-orange-400">{fmt(sim.totalInterest)}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">over loan life</p>
+                </div>
+                {simChanged && isFinite(monthsSaved) && (
+                  <>
+                    <div className="bg-emerald-900/30 border border-emerald-800/50 rounded-lg p-3">
+                      <p className="text-xs text-emerald-500 mb-1">Time saved</p>
+                      <p className="font-semibold text-emerald-400">{monthsToYears(monthsSaved)}</p>
+                      <p className="text-xs text-emerald-500 mt-0.5">vs current payments</p>
+                    </div>
+                    <div className="bg-emerald-900/30 border border-emerald-800/50 rounded-lg p-3">
+                      <p className="text-xs text-emerald-500 mb-1">Interest saved</p>
+                      <p className="font-semibold text-emerald-400">{fmt(interestSaved)}</p>
+                      <p className="text-xs text-emerald-500 mt-0.5">vs current payments</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            {!isFinite(sim.months) && (
+              <p className="text-red-400 text-sm">Payment too low to cover interest</p>
+            )}
+
+            <TargetPayoffCalc balance={simBalance} rate={loan.interest_rate} currentTotal={effectiveMonthly + effectiveExtra} />
+          </div>
         )}
       </div>
 

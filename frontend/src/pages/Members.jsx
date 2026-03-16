@@ -11,11 +11,15 @@ const COLOURS = [
   '#3b82f6', '#64748b',
 ];
 
+const INCOME_SCHEDULES = ['WEEKLY', 'FORTNIGHTLY', 'MONTHLY', 'ANNUALLY'];
+
 function MemberForm({ member, onClose }) {
   const qc = useQueryClient();
   const isNew = !member;
   const [name, setName] = useState(member?.name ?? '');
   const [color, setColor] = useState(member?.color ?? COLOURS[0]);
+  const [incomeAmount, setIncomeAmount] = useState(member?.income_amount ?? '');
+  const [incomeSchedule, setIncomeSchedule] = useState(member?.income_schedule ?? 'MONTHLY');
 
   const mut = useMutation({
     mutationFn: (data) => isNew ? api.members.create(data) : api.members.update(member.id, data),
@@ -33,7 +37,10 @@ function MemberForm({ member, onClose }) {
           <h2 className="font-semibold">{isNew ? 'Add Member' : 'Edit Member'}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-200"><X size={20} /></button>
         </div>
-        <form onSubmit={(e) => { e.preventDefault(); mut.mutate({ name, color }); }} className="p-5 space-y-4">
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          mut.mutate({ name, color, income_amount: parseFloat(incomeAmount) || null, income_schedule: incomeSchedule });
+        }} className="p-5 space-y-4">
           <div>
             <label className="block text-xs text-slate-400 mb-1">Name *</label>
             <input
@@ -52,6 +59,25 @@ function MemberForm({ member, onClose }) {
                   style={{ background: c }}
                 />
               ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Income <span className="text-slate-600">(optional)</span></label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-2 text-slate-400 text-sm">$</span>
+                <input
+                  type="number" min="0" step="0.01"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                  value={incomeAmount} onChange={e => setIncomeAmount(e.target.value)} placeholder="5000"
+                />
+              </div>
+              <select
+                className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                value={incomeSchedule} onChange={e => setIncomeSchedule(e.target.value)}
+              >
+                {INCOME_SCHEDULES.map(s => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
+              </select>
             </div>
           </div>
           <div className="flex gap-3 pt-1">
@@ -103,6 +129,11 @@ export default function Members() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {members.map(m => {
           const breakdown = memberBreakdown.find(b => b.id === m.id);
+          const incomeMonthly = m.income_amount ? (() => {
+            const w = { WEEKLY: 1, FORTNIGHTLY: 2, MONTHLY: 52/12, ANNUALLY: 52 };
+            return (m.income_amount / (w[m.income_schedule] || 52/12)) * (52/12);
+          })() : null;
+          const expensePct = incomeMonthly && breakdown?.monthly ? (breakdown.monthly / incomeMonthly) * 100 : null;
           return (
             <div key={m.id} className="bg-slate-900 rounded-xl border border-slate-800 p-5">
               <div className="flex items-start justify-between mb-4">
@@ -120,6 +151,16 @@ export default function Members() {
                   <button onClick={() => { if (confirm(`Remove ${m.name}?`)) deleteMut.mutate(m.id); }} className="p-1.5 text-slate-500 hover:text-red-400 rounded"><Trash2 size={15} /></button>
                 </div>
               </div>
+
+              {incomeMonthly != null && (
+                <div className="mb-3 bg-slate-800 rounded-lg px-3 py-2 flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Income</span>
+                  <div className="text-right">
+                    <span className="text-sm font-semibold text-emerald-400">{fmt(incomeMonthly)}/mo</span>
+                    <span className="text-xs text-slate-500 ml-2">{fmt(incomeMonthly * 12)}/yr</span>
+                  </div>
+                </div>
+              )}
 
               {breakdown ? (
                 <div className="space-y-2">
@@ -150,6 +191,21 @@ export default function Members() {
                       <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
                         <div className="h-full rounded-full" style={{ width: `${(breakdown.monthly / summary.total.monthly) * 100}%`, background: m.color }} />
                       </div>
+                    </div>
+                  )}
+                  {expensePct != null && (
+                    <div className="mt-2 pt-2 border-t border-slate-800">
+                      <div className="flex justify-between text-xs text-slate-500 mb-1">
+                        <span>Expenses as % of income</span>
+                        <span className={expensePct > 50 ? 'text-red-400' : expensePct > 30 ? 'text-amber-400' : 'text-emerald-400'}>
+                          {expensePct.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all"
+                          style={{ width: `${Math.min(100, expensePct)}%`, background: expensePct > 50 ? '#ef4444' : expensePct > 30 ? '#f59e0b' : '#10b981' }} />
+                      </div>
+                      <p className="text-xs text-slate-600 mt-1">{fmt(incomeMonthly - breakdown.monthly)}/mo left after expenses</p>
                     </div>
                   )}
                 </div>

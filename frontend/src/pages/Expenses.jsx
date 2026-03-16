@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, X, Check, Receipt, ToggleLeft, ToggleRight, Search, LayoutList, Tag } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, X, Check, Receipt, Search, LayoutList, Tag, Eye, EyeOff } from 'lucide-react';
 import { api } from '../api.js';
 
 const SCHEDULES = ['WEEKLY', 'FORTNIGHTLY', 'MONTHLY', 'QUARTERLY', 'ANNUALLY', 'ONCE', 'IRREGULAR'];
@@ -644,7 +644,7 @@ export default function Expenses() {
                     title={exp.is_active ? 'Mark inactive' : 'Mark active'}
                     className={`p-1.5 rounded ${exp.is_active ? 'text-slate-500 hover:text-amber-400' : 'text-amber-400 hover:text-emerald-400'}`}
                   >
-                    {exp.is_active ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                    {exp.is_active ? <Eye size={16} /> : <EyeOff size={16} />}
                   </button>
                   <button onClick={() => setExpanded(isExp ? null : exp.id)} className="p-1.5 text-slate-500 hover:text-slate-300 rounded">
                     {isExp ? <ChevronUp size={16} /> : <ChevronDown size={16} />}

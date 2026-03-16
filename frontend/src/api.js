@@ -7,7 +7,7 @@ async function req(path, opts = {}) {
   const res = await fetch(`${BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
-      ...(key ? { 'X-API-Key': key } : {}),
+      ...(key ? { 'Authorization': `Bearer ${key}` } : {}),
       ...opts.headers,
     },
     ...opts,
@@ -53,6 +53,12 @@ export const api = {
     create: (data)     => req('/loans', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => req(`/loans/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id)       => req(`/loans/${id}`, { method: 'DELETE' }),
+  },
+  savingsGoals: {
+    list:   ()         => req('/savings-goals'),
+    create: (data)     => req('/savings-goals', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => req(`/savings-goals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id)       => req(`/savings-goals/${id}`, { method: 'DELETE' }),
   },
   summary:     ()              => req('/summary'),
   projections: (months = 12)  => req(`/projections?months=${months}`),
