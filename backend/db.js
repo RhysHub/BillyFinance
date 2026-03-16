@@ -157,6 +157,20 @@ db.exec(`
 `);
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS loan_linked_expenses (
+    loan_id TEXT NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+    expense_id TEXT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+    PRIMARY KEY (loan_id, expense_id)
+  );
+`);
+
+// Add balance_date to loans if missing
+const loanCols = db.pragma('table_info(loans)').map(c => c.name);
+if (!loanCols.includes('balance_date')) {
+  db.exec('ALTER TABLE loans ADD COLUMN balance_date TEXT');
+}
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

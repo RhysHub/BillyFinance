@@ -11,11 +11,10 @@ const fmt = (n) => n?.toLocaleString('en-AU', { style: 'currency', currency: 'AU
 const fmt2 = (n) => n?.toLocaleString('en-AU', { style: 'currency', currency: 'AUD' }) ?? '$0.00';
 const tooltipStyle = { background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', color: '#f1f5f9' };
 
-// Core amortization — returns { months, totalInterest, schedule (yearly snapshots) }
 function amortize(balance, annualRate, monthlyPayment, extraMonthly = 0) {
   const r = annualRate / 100 / 12;
   const payment = monthlyPayment + extraMonthly;
-  const minRequired = balance * r; // bare minimum to cover interest
+  const minRequired = balance * r;
 
   if (payment <= minRequired || balance <= 0 || r <= 0) {
     return { months: Infinity, totalInterest: Infinity, schedule: [] };
@@ -33,7 +32,6 @@ function amortize(balance, annualRate, monthlyPayment, extraMonthly = 0) {
     totalInterest += interest;
     month++;
 
-    // Snapshot every 12 months
     if (month % 12 === 0 || remaining <= 0.01) {
       const yr = month / 12;
       const now = new Date();
@@ -63,16 +61,18 @@ function monthsToYears(months) {
   return y > 0 ? `${y}y ${m}m` : `${m}m`;
 }
 
-function LoanForm({ loan, onClose }) {
+function LoanForm({ loan, expenses, onClose }) {
   const qc = useQueryClient();
   const isNew = !loan;
   const [form, setForm] = useState({
     name: loan?.name ?? '',
     balance: loan?.balance ?? '',
+    balance_date: loan?.balance_date ?? new Date().toISOString().slice(0, 10),
     interest_rate: loan?.interest_rate ?? '',
     monthly_payment: loan?.monthly_payment ?? '',
     extra_payment: loan?.extra_payment ?? 0,
     notes: loan?.notes ?? '',
+    linked_expense_ids: loan?.linked_expense_ids ?? [],
   });
 
   const mut = useMutation({
@@ -82,9 +82,20 @@ function LoanForm({ loan, onClose }) {
 
   const f = (k) => ({ value: form[k], onChange: (e) => setForm(x => ({ ...x, [k]: e.target.value })) });
 
+  const toggleExpense = (id) => {
+    setForm(x => ({
+      ...x,
+      linked_expense_ids: x.linked_expense_ids.includes(id)
+        ? x.linked_expense_ids.filter(i => i !== id)
+        : [...x.linked_expense_ids, id],
+    }));
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._closeOnUp = true; }} onMouseUp={(e) => { if (e.currentTarget._closeOnUp) { e.currentTarget._closeOnUp = false; onClose(); } }}>
-      <div className="bg-slate-900 rounded-2xl border border-slate-700 w-full max-w-md">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._closeOnUp = true; }}
+      onMouseUp={(e) => { if (e.currentTarget._closeOnUp) { e.currentTarget._closeOnUp = false; onClose(); } }}>
+      <div className="bg-slate-900 rounded-2xl border border-slate-700 w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-slate-800">
           <h2 className="font-semibold">{isNew ? 'Add Loan' : 'Edit Loan'}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-200"><X size={20} /></button>
@@ -108,18 +119,22 @@ function LoanForm({ loan, onClose }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Current Balance *</label>
+              <label className="block text-xs text-slate-400 mb-1">Balance *</label>
               <div className="relative">
                 <span className="absolute left-3 top-2 text-slate-400 text-sm">$</span>
                 <input type="number" min="0" step="0.01" className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:border-indigo-500" placeholder="450000" required {...f('balance')} />
               </div>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Interest Rate (% p.a.) *</label>
-              <div className="relative">
-                <input type="number" min="0" max="30" step="0.01" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 pr-8 py-2 text-sm focus:outline-none focus:border-indigo-500" placeholder="6.14" required {...f('interest_rate')} />
-                <span className="absolute right-3 top-2 text-slate-400 text-sm">%</span>
-              </div>
+              <label className="block text-xs text-slate-400 mb-1">Balance as of *</label>
+              <input type="date" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" required {...f('balance_date')} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Interest Rate (% p.a.) *</label>
+            <div className="relative">
+              <input type="number" min="0" max="30" step="0.01" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 pr-8 py-2 text-sm focus:outline-none focus:border-indigo-500" placeholder="6.14" required {...f('interest_rate')} />
+              <span className="absolute right-3 top-2 text-slate-400 text-sm">%</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -138,6 +153,29 @@ function LoanForm({ loan, onClose }) {
               </div>
             </div>
           </div>
+
+          {/* Linked expenses */}
+          {expenses.length > 0 && (
+            <div>
+              <label className="block text-xs text-slate-400 mb-2">Linked Expenses</label>
+              <p className="text-xs text-slate-500 mb-2">Tick expenses that pay down this loan — Billy will estimate the current balance based on payments made since the balance date.</p>
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {expenses.map(exp => (
+                  <label key={exp.id} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.linked_expense_ids.includes(exp.id)}
+                      onChange={() => toggleExpense(exp.id)}
+                      className="rounded"
+                    />
+                    <span className="text-sm">{exp.name}</span>
+                    <span className="text-xs text-slate-500 ml-auto">{exp.schedule}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs text-slate-400 mb-1">Notes</label>
             <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" placeholder="Optional notes..." {...f('notes')} />
@@ -157,8 +195,12 @@ function LoanForm({ loan, onClose }) {
 function LoanCard({ loan, onEdit, onDelete }) {
   const [simExtra, setSimExtra] = useState(loan.extra_payment);
 
-  const base = amortize(loan.balance, loan.interest_rate, loan.monthly_payment, loan.extra_payment);
-  const sim  = amortize(loan.balance, loan.interest_rate, loan.monthly_payment, parseFloat(simExtra) || 0);
+  const currentBalance = loan.current_balance ?? loan.balance;
+  const hasTracking = loan.balance_date && loan.linked_expense_ids?.length > 0;
+  const paid = hasTracking ? Math.max(0, loan.balance - currentBalance) : 0;
+
+  const base = amortize(currentBalance, loan.interest_rate, loan.monthly_payment, loan.extra_payment);
+  const sim  = amortize(currentBalance, loan.interest_rate, loan.monthly_payment, parseFloat(simExtra) || 0);
 
   const monthsSaved = isFinite(base.months) && isFinite(sim.months) ? base.months - sim.months : 0;
   const interestSaved = isFinite(base.totalInterest) && isFinite(sim.totalInterest)
@@ -166,7 +208,6 @@ function LoanCard({ loan, onEdit, onDelete }) {
 
   const simChanged = (parseFloat(simExtra) || 0) !== loan.extra_payment;
 
-  // Merge schedules for chart (show up to ~360 months / 30 years)
   const chartData = base.schedule.map((pt, i) => ({
     label: pt.label,
     Current: Math.round(pt.balance),
@@ -188,11 +229,13 @@ function LoanCard({ loan, onEdit, onDelete }) {
           </div>
         </div>
 
-        {/* Key stats */}
         <div className="grid grid-cols-3 gap-3 mt-4">
           <div className="bg-slate-800 rounded-lg p-3">
-            <p className="text-xs text-slate-500">Balance</p>
-            <p className="font-bold text-red-400 mt-0.5">{fmt(loan.balance)}</p>
+            <p className="text-xs text-slate-500">{hasTracking ? 'Est. Current Balance' : 'Balance'}</p>
+            <p className="font-bold text-red-400 mt-0.5">{fmt(currentBalance)}</p>
+            {hasTracking && (
+              <p className="text-xs text-slate-500 mt-0.5">{fmt(paid)} paid since {new Date(loan.balance_date).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' })}</p>
+            )}
           </div>
           <div className="bg-slate-800 rounded-lg p-3">
             <p className="text-xs text-slate-500">Rate</p>
@@ -297,6 +340,7 @@ export default function Loans() {
   const [modal, setModal] = useState(null);
 
   const { data: loans = [], isLoading } = useQuery({ queryKey: ['loans'], queryFn: api.loans.list });
+  const { data: expenses = [] } = useQuery({ queryKey: ['expenses'], queryFn: api.expenses.list });
 
   const deleteMut = useMutation({
     mutationFn: api.loans.delete,
@@ -341,6 +385,7 @@ export default function Loans() {
       {modal && (
         <LoanForm
           loan={modal === 'new' ? null : modal}
+          expenses={expenses}
           onClose={() => setModal(null)}
         />
       )}
