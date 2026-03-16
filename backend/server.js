@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync } from 'fs';
+import { existsSync, unlinkSync } from 'fs';
 
 // Init DB (runs schema creation + seed on first boot)
 import { db } from './db.js';
@@ -37,11 +37,19 @@ app.use('/api', (req, res, next) => {
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '1.0.0' }));
 
-// Backup: checkpoint WAL into main file then download
-app.get('/api/backup', (req, res) => {
+// Backup: use SQLite online backup API — safe to run while the server is active
+app.get('/api/backup', async (req, res) => {
   const dbPath = process.env.DB_PATH || './data/billy.db';
-  db.pragma('wal_checkpoint(TRUNCATE)');
-  res.download(dbPath, `billy-backup-${new Date().toISOString().slice(0,10)}.db`);
+  const tmpPath = `${dbPath}.backup-tmp`;
+  try {
+    await db.backup(tmpPath);
+    res.download(tmpPath, `billy-backup-${new Date().toISOString().slice(0,10)}.db`, () => {
+      try { unlinkSync(tmpPath); } catch {}
+    });
+  } catch (e) {
+    try { unlinkSync(tmpPath); } catch {}
+    res.status(500).json({ error: `Backup failed: ${e.message}` });
+  }
 });
 
 // Restore: upload a SQLite file to replace the current DB, then restart
