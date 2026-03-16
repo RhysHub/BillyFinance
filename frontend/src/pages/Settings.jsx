@@ -118,6 +118,18 @@ function ApiKeySection() {
 }
 
 const ENDPOINTS = [
+  // ── Health ─────────────────────────────────────────────────────────────────
+  {
+    method: 'GET',
+    path: '/api/health',
+    tag: 'data',
+    summary: 'Health check',
+    desc: 'Returns server status. Use this to verify the API is reachable and test your Bearer token.',
+    response: '{ status: "ok", version: "1.0.0" }',
+    example: `curl http://your-host/api/health \\
+  -H "Authorization: Bearer YOUR_KEY"`,
+  },
+
   // ── Automation ────────────────────────────────────────────────────────────
   {
     method: 'POST',
