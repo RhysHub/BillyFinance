@@ -158,6 +158,8 @@ function LoanForm({ loan, expenses, onClose }) {
   const isNew = !loan;
   const [form, setForm] = useState({
     name: loan?.name ?? '',
+    initial_balance: loan?.initial_balance ?? '',
+    start_date: loan?.start_date ?? '',
     balance: loan?.balance ?? '',
     balance_date: loan?.balance_date ?? new Date().toISOString().slice(0, 10),
     interest_rate: loan?.interest_rate ?? '',
@@ -205,7 +207,20 @@ function LoanForm({ loan, expenses, onClose }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Balance *</label>
+              <label className="block text-xs text-slate-400 mb-1">Initial Loan Amount</label>
+              <div className="relative">
+                <span className="absolute left-3 top-2 text-slate-400 text-sm">$</span>
+                <input type="number" min="0" step="0.01" className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:border-indigo-500" placeholder="500000" {...f('initial_balance')} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Loan Start Date</label>
+              <input type="date" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" {...f('start_date')} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Current Balance *</label>
               <div className="relative">
                 <span className="absolute left-3 top-2 text-slate-400 text-sm">$</span>
                 <input type="number" min="0" step="0.01" className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:border-indigo-500" placeholder="450000" required {...f('balance')} />
@@ -298,6 +313,24 @@ function LoanCard({ loan, onEdit, onDelete }) {
             <button onClick={onDelete} className="p-1.5 text-slate-500 hover:text-red-400 rounded"><Trash2 size={15} /></button>
           </div>
         </div>
+
+        {loan.initial_balance && (
+          <div className="mt-4">
+            <div className="flex justify-between text-xs text-slate-500 mb-1">
+              <span>{fmt(currentBalance)} remaining of {fmt(loan.initial_balance)}</span>
+              <span>{Math.round((1 - currentBalance / loan.initial_balance) * 100)}% paid off</span>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-2">
+              <div
+                className="bg-emerald-500 h-2 rounded-full transition-all"
+                style={{ width: `${Math.min(100, Math.round((1 - currentBalance / loan.initial_balance) * 100))}%` }}
+              />
+            </div>
+            {loan.start_date && (
+              <p className="text-xs text-slate-600 mt-1">Since {new Date(loan.start_date).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' })}</p>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-3 mt-4">
           <div className="bg-slate-800 rounded-lg p-3">

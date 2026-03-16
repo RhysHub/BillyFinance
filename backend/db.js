@@ -169,6 +169,8 @@ const loanCols = db.pragma('table_info(loans)').map(c => c.name);
 if (!loanCols.includes('balance_date')) db.exec('ALTER TABLE loans ADD COLUMN balance_date TEXT');
 if (!loanCols.includes('monthly_expense_id')) db.exec('ALTER TABLE loans ADD COLUMN monthly_expense_id TEXT REFERENCES expenses(id) ON DELETE SET NULL');
 if (!loanCols.includes('extra_expense_id')) db.exec('ALTER TABLE loans ADD COLUMN extra_expense_id TEXT REFERENCES expenses(id) ON DELETE SET NULL');
+if (!loanCols.includes('initial_balance')) db.exec('ALTER TABLE loans ADD COLUMN initial_balance REAL');
+if (!loanCols.includes('start_date')) db.exec('ALTER TABLE loans ADD COLUMN start_date TEXT');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS settings (
