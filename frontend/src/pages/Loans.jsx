@@ -96,7 +96,7 @@ function ExpensePickerModal({ expenses, onSelect, onClose }) {
               className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-800 flex items-center justify-between group"
             >
               <span className="text-sm">{exp.name}</span>
-              <span className="text-xs text-slate-500">{exp.schedule} · {fmt2(exp.amount)}</span>
+              <span className="text-xs text-slate-500">{exp.schedule}{exp.fixed_amount ? ` · ${fmt2(exp.fixed_amount)}` : ''}</span>
             </button>
           ))}
         </div>

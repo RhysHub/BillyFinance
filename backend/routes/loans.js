@@ -14,11 +14,11 @@ function getEffectivePayments(loan) {
 
   if (loan.monthly_expense_id) {
     const exp = db.prepare('SELECT * FROM expenses WHERE id = ?').get(loan.monthly_expense_id);
-    if (exp) monthly_payment = toMonthly(exp.amount, exp.schedule);
+    if (exp) monthly_payment = toMonthly(exp.fixed_amount, exp.schedule);
   }
   if (loan.extra_expense_id) {
     const exp = db.prepare('SELECT * FROM expenses WHERE id = ?').get(loan.extra_expense_id);
-    if (exp) extra_payment = toMonthly(exp.amount, exp.schedule);
+    if (exp) extra_payment = toMonthly(exp.fixed_amount, exp.schedule);
   }
 
   return { monthly_payment, extra_payment };
@@ -46,13 +46,13 @@ function computeCurrentBalance(loan, linkedExpenseIds) {
       const entries = db.prepare('SELECT * FROM bill_entries WHERE expense_id = ? AND date >= ?').all(expId, loan.balance_date);
       totalPaid += entries.reduce((s, e) => s + e.amount, 0);
     } else if (exp.schedule === 'ONCE') {
-      totalPaid += exp.amount;
+      totalPaid += exp.fixed_amount;
     } else {
       const weeksPerPeriod = WEEKS_PER_PERIOD[exp.schedule];
       if (weeksPerPeriod) {
         const weeksPassed = (today - balanceDate) / MS_PER_WEEK;
         const periodsPassed = Math.floor(weeksPassed / weeksPerPeriod);
-        totalPaid += periodsPassed * exp.amount;
+        totalPaid += periodsPassed * exp.fixed_amount;
       }
     }
   }
