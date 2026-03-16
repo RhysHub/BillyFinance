@@ -171,6 +171,7 @@ if (!loanCols.includes('monthly_expense_id')) db.exec('ALTER TABLE loans ADD COL
 if (!loanCols.includes('extra_expense_id')) db.exec('ALTER TABLE loans ADD COLUMN extra_expense_id TEXT REFERENCES expenses(id) ON DELETE SET NULL');
 if (!loanCols.includes('initial_balance')) db.exec('ALTER TABLE loans ADD COLUMN initial_balance REAL');
 if (!loanCols.includes('start_date')) db.exec('ALTER TABLE loans ADD COLUMN start_date TEXT');
+if (!loanCols.includes('loan_term_years')) db.exec('ALTER TABLE loans ADD COLUMN loan_term_years INTEGER');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS settings (

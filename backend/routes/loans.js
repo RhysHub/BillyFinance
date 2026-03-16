@@ -73,14 +73,14 @@ router.get('/', (_req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { name, balance, balance_date, initial_balance, start_date, interest_rate, monthly_payment = 0, extra_payment = 0, monthly_expense_id, extra_expense_id, notes, linked_expense_ids = [] } = req.body;
+  const { name, balance, balance_date, initial_balance, start_date, loan_term_years, interest_rate, monthly_payment = 0, extra_payment = 0, monthly_expense_id, extra_expense_id, notes, linked_expense_ids = [] } = req.body;
   if (!name?.trim() || !balance || !interest_rate) {
     return res.status(400).json({ error: 'name, balance and interest_rate are required' });
   }
   const loan = db.prepare(`
-    INSERT INTO loans (name, balance, balance_date, initial_balance, start_date, interest_rate, monthly_payment, extra_payment, monthly_expense_id, extra_expense_id, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *
-  `).get(name.trim(), balance, balance_date || null, initial_balance || null, start_date || null, interest_rate, monthly_payment || 0, extra_payment || 0, monthly_expense_id || null, extra_expense_id || null, notes || null);
+    INSERT INTO loans (name, balance, balance_date, initial_balance, start_date, loan_term_years, interest_rate, monthly_payment, extra_payment, monthly_expense_id, extra_expense_id, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *
+  `).get(name.trim(), balance, balance_date || null, initial_balance || null, start_date || null, loan_term_years || null, interest_rate, monthly_payment || 0, extra_payment || 0, monthly_expense_id || null, extra_expense_id || null, notes || null);
 
   if (linked_expense_ids.length) {
     const ins = db.prepare('INSERT OR IGNORE INTO loan_linked_expenses (loan_id, expense_id) VALUES (?, ?)');
@@ -90,11 +90,11 @@ router.post('/', (req, res) => {
 });
 
 router.put('/:id', (req, res) => {
-  const { name, balance, balance_date, initial_balance, start_date, interest_rate, monthly_payment = 0, extra_payment = 0, monthly_expense_id, extra_expense_id, notes, linked_expense_ids = [] } = req.body;
+  const { name, balance, balance_date, initial_balance, start_date, loan_term_years, interest_rate, monthly_payment = 0, extra_payment = 0, monthly_expense_id, extra_expense_id, notes, linked_expense_ids = [] } = req.body;
   const loan = db.prepare(`
-    UPDATE loans SET name=?, balance=?, balance_date=?, initial_balance=?, start_date=?, interest_rate=?, monthly_payment=?, extra_payment=?, monthly_expense_id=?, extra_expense_id=?, notes=?
+    UPDATE loans SET name=?, balance=?, balance_date=?, initial_balance=?, start_date=?, loan_term_years=?, interest_rate=?, monthly_payment=?, extra_payment=?, monthly_expense_id=?, extra_expense_id=?, notes=?
     WHERE id=? RETURNING *
-  `).get(name, balance, balance_date || null, initial_balance || null, start_date || null, interest_rate, monthly_payment || 0, extra_payment || 0, monthly_expense_id || null, extra_expense_id || null, notes || null, req.params.id);
+  `).get(name, balance, balance_date || null, initial_balance || null, start_date || null, loan_term_years || null, interest_rate, monthly_payment || 0, extra_payment || 0, monthly_expense_id || null, extra_expense_id || null, notes || null, req.params.id);
   if (!loan) return res.status(404).json({ error: 'Not found' });
 
   db.prepare('DELETE FROM loan_linked_expenses WHERE loan_id = ?').run(req.params.id);

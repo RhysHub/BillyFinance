@@ -160,6 +160,7 @@ function LoanForm({ loan, expenses, onClose }) {
     name: loan?.name ?? '',
     initial_balance: loan?.initial_balance ?? '',
     start_date: loan?.start_date ?? '',
+    loan_term_years: loan?.loan_term_years ?? '',
     balance: loan?.balance ?? '',
     balance_date: loan?.balance_date ?? new Date().toISOString().slice(0, 10),
     interest_rate: loan?.interest_rate ?? '',
@@ -205,17 +206,24 @@ function LoanForm({ loan, expenses, onClose }) {
             <label className="block text-xs text-slate-400 mb-1">Name *</label>
             <input className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" placeholder="e.g. Home Loan" required {...f('name')} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Initial Loan Amount</label>
+              <label className="block text-xs text-slate-400 mb-1">Initial Amount</label>
               <div className="relative">
                 <span className="absolute left-3 top-2 text-slate-400 text-sm">$</span>
                 <input type="number" min="0" step="0.01" className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:border-indigo-500" placeholder="500000" {...f('initial_balance')} />
               </div>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Loan Start Date</label>
+              <label className="block text-xs text-slate-400 mb-1">Start Date</label>
               <input type="date" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" {...f('start_date')} />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Loan Term</label>
+              <div className="relative">
+                <input type="number" min="1" max="50" step="1" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 pr-10 py-2 text-sm focus:outline-none focus:border-indigo-500" placeholder="30" {...f('loan_term_years')} />
+                <span className="absolute right-3 top-2 text-slate-400 text-sm">yrs</span>
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -275,6 +283,14 @@ function LoanForm({ loan, expenses, onClose }) {
   );
 }
 
+// Calculate minimum required payment for a given principal, rate, term
+function minPayment(principal, annualRate, termYears) {
+  const r = annualRate / 100 / 12;
+  const n = termYears * 12;
+  if (r === 0) return principal / n;
+  return principal * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+}
+
 function LoanCard({ loan, onEdit, onDelete }) {
   const [simExtra, setSimExtra] = useState(loan.effective_extra ?? loan.extra_payment);
 
@@ -287,6 +303,18 @@ function LoanCard({ loan, onEdit, onDelete }) {
 
   const base = amortize(currentBalance, loan.interest_rate, effectiveMonthly, effectiveExtra);
   const sim  = amortize(currentBalance, loan.interest_rate, effectiveMonthly, parseFloat(simExtra) || 0);
+
+  // Lifetime comparison: minimum vs actual payments from initial balance
+  const hasLifetime = loan.initial_balance && loan.loan_term_years;
+  const minPmt = hasLifetime ? minPayment(loan.initial_balance, loan.interest_rate, loan.loan_term_years) : 0;
+  const minScenario = hasLifetime ? amortize(loan.initial_balance, loan.interest_rate, minPmt) : null;
+  const actualScenario = hasLifetime ? amortize(loan.initial_balance, loan.interest_rate, effectiveMonthly, effectiveExtra) : null;
+  const lifetimeInterestSaved = hasLifetime && minScenario && actualScenario && isFinite(actualScenario.totalInterest)
+    ? minScenario.totalInterest - actualScenario.totalInterest : null;
+  const lifetimeTimeSaved = hasLifetime && minScenario && actualScenario && isFinite(actualScenario.months)
+    ? minScenario.months - actualScenario.months : null;
+  const lifetimeTotalMin = hasLifetime && minScenario ? loan.initial_balance + minScenario.totalInterest : null;
+  const lifetimeTotalActual = hasLifetime && actualScenario && isFinite(actualScenario.totalInterest) ? loan.initial_balance + actualScenario.totalInterest : null;
 
   const monthsSaved = isFinite(base.months) && isFinite(sim.months) ? base.months - sim.months : 0;
   const interestSaved = isFinite(base.totalInterest) && isFinite(sim.totalInterest)
@@ -365,6 +393,38 @@ function LoanCard({ loan, onEdit, onDelete }) {
           </div>
         </div>
       </div>
+
+      {hasLifetime && lifetimeInterestSaved !== null && (
+        <div className="p-5 border-b border-slate-800">
+          <p className="text-sm font-medium mb-3">Lifetime Savings vs Minimum Repayments</p>
+          <p className="text-xs text-slate-500 mb-3">
+            Minimum payment on {fmt(loan.initial_balance)} over {loan.loan_term_years} years: <span className="text-slate-300">{fmt2(minPmt)}/mo</span>
+            {' · '}Your payment: <span className="text-slate-300">{fmt2(effectiveMonthly + effectiveExtra)}/mo</span>
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-800 rounded-lg p-3">
+              <p className="text-xs text-slate-500 mb-1">Total cost at minimum</p>
+              <p className="font-semibold text-orange-400">{fmt(lifetimeTotalMin)}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{fmt(minScenario.totalInterest)} interest</p>
+            </div>
+            <div className="bg-slate-800 rounded-lg p-3">
+              <p className="text-xs text-slate-500 mb-1">Total cost at your payments</p>
+              <p className="font-semibold text-indigo-400">{fmt(lifetimeTotalActual)}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{fmt(actualScenario.totalInterest)} interest</p>
+            </div>
+            <div className="bg-emerald-900/30 border border-emerald-800/50 rounded-lg p-3">
+              <p className="text-xs text-emerald-500 mb-1">Interest saved</p>
+              <p className="font-semibold text-emerald-400">{fmt(lifetimeInterestSaved)}</p>
+              <p className="text-xs text-emerald-500 mt-0.5">vs minimum repayments</p>
+            </div>
+            <div className="bg-emerald-900/30 border border-emerald-800/50 rounded-lg p-3">
+              <p className="text-xs text-emerald-500 mb-1">Time saved</p>
+              <p className="font-semibold text-emerald-400">{monthsToYears(lifetimeTimeSaved)}</p>
+              <p className="text-xs text-emerald-500 mt-0.5">paid off {monthsToYears(loan.loan_term_years * 12 - actualScenario.months)} early</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="p-5 border-b border-slate-800">
         <div className="flex items-center justify-between mb-3">
